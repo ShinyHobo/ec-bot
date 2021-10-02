@@ -18,6 +18,8 @@ process.on('SIGINT', () => {
 // Set up bot
 const Discord = require('discord.js');
 const bot = new Discord.Client();
+
+// Set up bot commands
 bot.commands = new Discord.Collection();
 const botCommands = require('./commands');
 
@@ -38,7 +40,7 @@ bot.on('message', msg => {
   if(msg.author.bot) {
     return;
   }
-  
+
   let args = msg.content.split(/ +/);
   const command = args.shift().toLowerCase();
   args = [db].concat(args);

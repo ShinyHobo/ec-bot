@@ -1,4 +1,4 @@
-const { RSA_NO_PADDING } = require('constants');
+const { Permissions } = require('discord.js');
 
 module.exports = {
     name: '!verify',
@@ -44,12 +44,45 @@ module.exports = {
             if(!result) {
                 return;
             }
+
+            if(!msg.guild) {
+                msg.reply('Command must be run from within server!');
+                return;
+            }
+
+            // regex here
     
             const db = args[0];
 
-            //const isDm = msg.channel.type === 'dm';
-            //msg.reply('');
-            msg.author.send('verified');
+            // check in db for existing code, do not allow more than one role per discord ser
+            // create new and send if none exists
+            // give role if does exist
+
+            const giveRole = (role) => {
+                msg.member.roles.add(role);
+                msg.reply('RSI user verified');
+            };
+
+            // Create 'RSI Verified' role
+            const roleName = 'RSI Verified';
+            const role = msg.guild.roles.cache.find(role => role.name === roleName);
+            if(!role) {
+                msg.member.guild.roles.create({
+                    data: {
+                        name: roleName,
+                        color: 'BLUE',
+                    },
+                    reason: 'Need role for tagging verified members'
+                })
+                .then(r => {
+                    // give role here
+                    giveRole(r);
+                })
+                .catch(console.error);
+            } else {
+                // give role here
+                giveRole(role);
+            }
         };
 
         exe();
