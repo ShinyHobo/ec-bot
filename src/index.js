@@ -12,7 +12,6 @@ db.serialize(() => {
 // Closes database connection on server shutdown
 process.on('SIGINT', () => {
   db.close();
-  server.close();
 });
 
 // Set up bot
