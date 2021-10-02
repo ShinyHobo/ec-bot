@@ -1,9 +1,12 @@
-const { Permissions } = require('discord.js');
-
 module.exports = {
     name: '!verify',
     description: 'Attempts to verify the discord user on RSI',
     execute(msg, args) {
+        if(!msg.guild) {
+            msg.reply('Command must be run from within server!');
+            return;
+        }
+
         if(args.length === 1 || args.length > 2) {
             msg.reply('Usage: !verify [RSI USERNAME]');
             return;
@@ -39,23 +42,30 @@ module.exports = {
                 }).catch(err => msg.reply('No response from RSI server!'));
             };
     
-            let result = await lookup(args[1]);
+            const result = await lookup(args[1]);
 
             if(!result) {
                 return;
             }
 
-            if(!msg.guild) {
-                msg.reply('Command must be run from within server!');
-                return;
-            }
+            // Scan result for UUID
+            const regex = /(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}/;
+            const resultUuid = regex.exec(result);
 
-            // regex here
-    
             const db = args[0];
+            // no result and no name in db
+            // no result and existing name
+            // result and no name
+            // result and name
+
+            if(!resultUuid) {
+
+            }
 
             // check in db for existing code, do not allow more than one role per discord ser
             // create new and send if none exists
+            const uuid = require('uuid');
+            const code = uuid.v4();
             // give role if does exist
 
             const giveRole = (role) => {
