@@ -49,50 +49,57 @@ module.exports = {
             }
 
             // Scan result for UUID
-            const regex = /(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}/;
+            const regex = /software/;// /(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}/;
             const resultUuid = regex.exec(result);
 
             const db = args[0];
-            // no result and no name in db
-            // no result and existing name
-            // result and no name
-            // result and name
+            // Check to see if user is already in db
+            db.all(`SELECT * FROM verification WHERE discord_id = '${msg.member.id}'`, (err, rows) => {
+                const uuid = require('uuid');
+                const code = uuid.v4();
 
-            if(!resultUuid) {
-
-            }
-
-            // check in db for existing code, do not allow more than one role per discord ser
-            // create new and send if none exists
-            const uuid = require('uuid');
-            const code = uuid.v4();
-            // give role if does exist
-
-            const giveRole = (role) => {
-                msg.member.roles.add(role);
-                msg.reply('RSI user verified');
-            };
-
-            // Create 'RSI Verified' role
-            const roleName = 'RSI Verified';
-            const role = msg.guild.roles.cache.find(role => role.name === roleName);
-            if(!role) {
-                msg.member.guild.roles.create({
-                    data: {
-                        name: roleName,
-                        color: 'BLUE',
-                    },
-                    reason: 'Need role for tagging verified members'
-                })
-                .then(r => {
-                    // give role here
-                    giveRole(r);
-                })
-                .catch(console.error);
-            } else {
-                // give role here
-                giveRole(role);
-            }
+                if(!rows.length && !resultUuid) {
+                    // create code and send
+                    db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
+                    msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+                } else if(!rows.length && resultUuid) {
+                    // create code and send, tell to remove existing code
+                    db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
+                    msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+                } else if(rows.length && !resultUuid) {
+                    // send old code reminder
+                    msg.author.send(`It appears that you have been verified before, however, you can use the following code to reverify your RSI account: \`\`\`${rows[0].code}\`\`\``);
+                } else if(rows[0].code === resultUuid[0]) {
+                    // if uuid matches
+                    const giveRole = (role) => {
+                        msg.member.roles.add(role);
+                        msg.reply('your RSI user verified');
+                    };
+    
+                    // Create 'RSI Verified' role
+                    const roleName = 'RSI Verified';
+                    const role = msg.guild.roles.cache.find(role => role.name === roleName);
+                    if(!role) {
+                        msg.member.guild.roles.create({
+                            data: {
+                                name: roleName,
+                                color: 'BLUE',
+                            },
+                            reason: 'Need role for tagging verified members'
+                        })
+                        .then(r => {
+                            // give role here
+                            giveRole(r);
+                        })
+                        .catch(console.error);
+                    } else {
+                        // give role here
+                        giveRole(role);
+                    }
+                } else {
+                    msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${rows[0].code}\`\`\``);
+                }
+            });
         };
 
         exe();
