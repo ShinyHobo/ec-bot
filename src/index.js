@@ -2,7 +2,7 @@ require('dotenv').config();
 
 // Set up database
 var sqlite3 = require('sqlite3').verbose();
-var db = new sqlite3.Database('ecdb');
+var db = new sqlite3.Database('ecdb.db');
 
 // Initialize database
 db.serialize(() => {
@@ -35,8 +35,13 @@ bot.on('ready', () => {
 
 // Watch the message history for commands
 bot.on('message', msg => {
-  const args = msg.content.split(/ +/);
+  if(msg.author.bot) {
+    return;
+  }
+  
+  let args = msg.content.split(/ +/);
   const command = args.shift().toLowerCase();
+  args = [db].concat(args);
   console.info(`Called command: ${command}`);
 
   if (!bot.commands.has(command)) return;
