@@ -4,11 +4,16 @@ require('dotenv').config();
 var sqlite3 = require('sqlite3').verbose();
 var db = new sqlite3.Database('ecdb');
 
+// Initialize database
 db.serialize(() => {
   db.run("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT)");
 });
 
-db.close();
+// Closes database connection on server shutdown
+process.on('SIGINT', () => {
+  db.close();
+  server.close();
+});
 
 // Set up bot
 const Discord = require('discord.js');
@@ -28,6 +33,7 @@ bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
 });
 
+// Watch the message history for commands
 bot.on('message', msg => {
   const args = msg.content.split(/ +/);
   const command = args.shift().toLowerCase();
@@ -39,6 +45,6 @@ bot.on('message', msg => {
     bot.commands.get(command).execute(msg, args);
   } catch (error) {
     console.error(error);
-    msg.reply('there was an error trying to execute that command!');
+    msg.reply('There was an error trying to execute that command!');
   }
 });
