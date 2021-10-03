@@ -1,12 +1,12 @@
 {
-  "name": "discord-bot",
-  "version": "1.0.0",
-  "description": "Discord bot for SitePoint",
-  "main": "index.js",
+  "name": "ec-bot",
+  "version": "0.0.1",
+  "description": "Discord bot for Enemy Contact",
+  "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "Michiel Mulders",
+  "author": "ShinyHobo",
   "license": "ISC",
   "dependencies": {
     "discord.js": "^12.5.3",
