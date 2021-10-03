@@ -1,4 +1,4 @@
 module.exports = {
-    //Ping: require('./ping'),
+    Ping: require('./ping'),
     Verify: require('./verify')
 };
