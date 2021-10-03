@@ -29,8 +29,12 @@ module.exports = {
                                 const jsdom = require("jsdom");
                                 const dom = new jsdom.JSDOM(data);
                                 const bio = dom.window.document.querySelector(".bio");
-                                const val = bio.querySelector('.value').textContent;
-                                resolve(val);
+                                if(bio) {
+                                    const val = bio.querySelector('.value').textContent;
+                                    resolve(val);
+                                    return;
+                                }
+                                resolve('this is not a uuid');
                             });
                         } else {
                             msg.reply('No response from RSI server!');
