@@ -76,11 +76,11 @@ module.exports = {
                 } else if(rows[0].code === resultUuid[0]) {
                     // if uuid matches
                     const giveRole = (role) => {
+                        msg.member.roles.add(role);
                         if(!msg.member.roles.cache.has(role.id)) {
-                            msg.member.roles.add(role);
                             msg.reply('your RSI user has been verified');
                         } else {
-                            msg.reply('your RSI user has already been verified');
+                            msg.reply('your RSI user has been reverified');
                         }
                     };
     
