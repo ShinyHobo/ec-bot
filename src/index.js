@@ -30,6 +30,7 @@ bot.login(TOKEN);
 
 bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
+  bot.user.setPresence({ game: { name: 'with my sourcecode', type: "playing", url: "https://github.com/ShinyHobo/ec-bot"}}); 
 });
 
 // Watch the message history for commands
