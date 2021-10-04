@@ -65,13 +65,16 @@ module.exports = {
                 if(!rows.length && !resultUuid) {
                     // create code and send
                     db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
+                    msg.reply('please check your dms for your verification code.');
                     msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
                 } else if(!rows.length && resultUuid) {
                     // create code and send, tell to remove existing code
                     db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
+                    msg.reply('please check your dms for your verification code.');
                     msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
                 } else if(rows.length && !resultUuid) {
                     // send old code reminder
+                    msg.reply('please check your dms for your verification code.');
                     msg.author.send(`It appears that you have been verified before, however, you can use the following code to reverify your RSI account: \`\`\`${rows[0].code}\`\`\``);
                 } else if(rows[0].code === resultUuid[0]) {
                     // if uuid matches
