@@ -58,59 +58,59 @@ module.exports = {
 
             const db = args[0];
             // Check to see if user is already in db
-            db.all(`SELECT * FROM verification WHERE discord_id = '${msg.member.id}'`, (err, rows) => {
-                const uuid = require('uuid');
-                const code = uuid.v4();
+            const verification = db.prepare(`SELECT * FROM verification WHERE discord_id = '${msg.member.id}' LIMIT 1`).get();
 
-                if(!rows.length && !resultUuid) {
-                    // create code and send
-                    db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
-                    msg.reply('please check your dms for your verification code.');
-                    msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
-                } else if(!rows.length && resultUuid) {
-                    // create code and send, tell to remove existing code
-                    db.run(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`);
-                    msg.reply('please check your dms for your verification code.');
-                    msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
-                } else if(rows.length && !resultUuid) {
-                    // send old code reminder
-                    msg.reply('please check your dms for your verification code.');
-                    msg.author.send(`It appears that you have been verified before, however, you can use the following code to reverify your RSI account: \`\`\`${rows[0].code}\`\`\``);
-                } else if(rows[0].code === resultUuid[0]) {
-                    // if uuid matches
-                    const giveRole = (role) => {
-                        msg.member.roles.add(role);
-                        if(!msg.member.roles.cache.has(role.id)) {
-                            msg.reply('your RSI user has been verified');
-                        } else {
-                            msg.reply('your RSI user has been reverified');
-                        }
-                    };
-    
-                    // Create 'RSI Verified' role
-                    const roleName = 'RSI Verified';
-                    const role = msg.guild.roles.cache.find(role => role.name === roleName);
-                    if(!role) {
-                        msg.member.guild.roles.create({
-                            data: {
-                                name: roleName,
-                                color: 'BLUE',
-                            },
-                            reason: 'Need role for tagging verified members'
-                        })
-                        .then(r => {
-                            // give role here
-                            giveRole(r);
-                        })
-                        .catch(console.error);
+            const uuid = require('uuid');
+            const code = uuid.v4();
+
+            if(!verification && !resultUuid) {
+                // create code and send
+                db.prepare(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`).run();
+                msg.reply('please check your DMs for your verification code.');
+                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+            } else if(!verification && resultUuid) {
+                // create code and send, tell to remove existing code
+                db.prepare(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`).run();
+                msg.reply('please check your DMs for your verification code.');
+                msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+            } else if(verification && !resultUuid) {
+                // send old code reminder
+                msg.reply('please check your DMs for your verification code.');
+                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+            } else if(verification.code === resultUuid[0]) {
+                // if uuid matches
+                const giveRole = (role) => {
+                    msg.member.roles.add(role);
+                    if(!msg.member.roles.cache.has(role.id)) {
+                        msg.reply('your RSI user has been verified');
                     } else {
-                        // give role here
-                        giveRole(role);
+                        msg.reply('your RSI user has been reverified');
                     }
+                };
+
+                // Create 'RSI Verified' role
+                const roleName = 'RSI Verified';
+                const role = msg.guild.roles.cache.find(role => role.name === roleName);
+                if(!role) {
+                    msg.member.guild.roles.create({
+                        data: {
+                            name: roleName,
+                            color: 'BLUE',
+                        },
+                        reason: 'Need role for tagging verified members'
+                    })
+                    .then(r => {
+                        // give role here
+                        giveRole(r);
+                    })
+                    .catch(console.error);
                 } else {
-                    msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${rows[0].code}\`\`\``);
+                    // give role here
+                    giveRole(role);
                 }
-            });
+            } else {
+                msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${verification.code}\`\`\``);
+            }
         };
 
         exe();

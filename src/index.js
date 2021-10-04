@@ -1,13 +1,11 @@
 require('dotenv').config();
 
 // Set up database
-var sqlite3 = require('sqlite3').verbose();
-var db = new sqlite3.Database('ecdb.db');
+var Database = require('better-sqlite3');
+var db = new Database('ecdb.db');
 
 // Initialize database
-db.serialize(() => {
-  db.run("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT)");
-});
+db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT)").run();
 
 // Closes database connection on server shutdown
 process.on('SIGINT', () => {
