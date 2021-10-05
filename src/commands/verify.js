@@ -12,6 +12,8 @@ module.exports = {
             return;
         }
 
+        const noMsg = () => {msg.reply('please ensure you allow messages from server members and try again.');};
+
         const exe = async () => {
             const lookup = async (username) => {
                 return await new Promise((resolve, reject) => {
@@ -62,21 +64,25 @@ module.exports = {
 
             const uuid = require('uuid');
             const code = uuid.v4();
-
+            
             if(!verification && !resultUuid) {
                 // create code and send
                 db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
-                msg.reply('please check your DMs for your verification code.');
-                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
+                    .then(() => msg.reply('please check your DMs for your verification code.'))
+                    .catch(() => noMsg());
             } else if(!verification && resultUuid) {
                 // create code and send, tell to remove existing code
                 db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
-                msg.reply('please check your DMs for your verification code.');
-                msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+                msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun 
+                    the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
+                    .then(() => msg.reply('please check your DMs for your verification code.'))
+                    .catch(() => noMsg());
             } else if(verification && !resultUuid) {
                 // send old code reminder
-                msg.reply('please check your DMs for your verification code.');
-                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``);
+                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``)
+                    .then(() => msg.reply('please check your DMs for your verification code.'))    
+                    .catch(() => noMsg());
             } else if(verification.code === resultUuid[0]) {
                 // if uuid matches
                 const giveRole = (role) => {
@@ -109,7 +115,7 @@ module.exports = {
                     giveRole(role);
                 }
             } else {
-                msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${verification.code}\`\`\``);
+                msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${verification.code}\`\`\``).catch(console.log);
             }
         };
 
