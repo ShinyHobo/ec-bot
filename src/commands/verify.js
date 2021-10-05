@@ -17,7 +17,7 @@ module.exports = {
                 return await new Promise((resolve, reject) => {
                     require('https').get(`https://robertsspaceindustries.com/citizens/${username}`, (res) => {
                         if(res.statusCode === 404) { // Citizen does not exist
-                            msg.reply('Could not find a citizen with that username!');
+                            msg.reply('I could not find a citizen with that username!');
                             resolve(false);
                         } else if(res.statusCode === 200) { // Citizen exists, check for code
                             let data = '';
@@ -37,13 +37,13 @@ module.exports = {
                                 resolve('this is not a uuid');
                             });
                         } else {
-                            msg.reply('No response from RSI server!');
+                            msg.reply('there was no response from RSI server!');
                             resolve(false);
                         }
                     }).on('error', (error) => {
                       reject(error);
                     });
-                }).catch(err => msg.reply('No response from RSI server!'));
+                }).catch(err => msg.reply('I\'ve had trouble contacting the RSI server. Please try again!'));
             };
     
             const result = await lookup(args[1]);
@@ -58,25 +58,25 @@ module.exports = {
 
             const db = args[0];
             // Check to see if user is already in db
-            const verification = db.prepare(`SELECT * FROM verification WHERE discord_id = '${msg.member.id}' LIMIT 1`).get();
+            const verification = db.prepare('SELECT * FROM verification WHERE discord_id = ?').get(msg.member.id);
 
             const uuid = require('uuid');
             const code = uuid.v4();
 
             if(!verification && !resultUuid) {
                 // create code and send
-                db.prepare(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`).run();
+                db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
                 msg.reply('please check your DMs for your verification code.');
                 msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
             } else if(!verification && resultUuid) {
                 // create code and send, tell to remove existing code
-                db.prepare(`INSERT INTO verification VALUES ('${msg.member.id}','${code}')`).run();
+                db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
                 msg.reply('please check your DMs for your verification code.');
                 msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
             } else if(verification && !resultUuid) {
                 // send old code reminder
                 msg.reply('please check your DMs for your verification code.');
-                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
+                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``);
             } else if(verification.code === resultUuid[0]) {
                 // if uuid matches
                 const giveRole = (role) => {
