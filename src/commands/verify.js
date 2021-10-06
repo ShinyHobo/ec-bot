@@ -120,5 +120,5 @@ module.exports = {
         };
 
         exe();
-    },
+    }
 };

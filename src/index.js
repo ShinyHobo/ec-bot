@@ -6,6 +6,7 @@ var db = new Database('ecdb.db');
 
 // Initialize database
 db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT)").run();
+db.prepare("CREATE TABLE IF NOT EXISTS threads (id TEXT, archive bool)").run();
 
 // Closes database connection on server shutdown
 process.on('SIGINT', () => {
@@ -13,11 +14,11 @@ process.on('SIGINT', () => {
 });
 
 // Set up bot
-const Discord = require('discord.js');
-const bot = new Discord.Client();
+const { Client, Intents, Collection } = require('discord.js');
+const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 
 // Set up bot commands
-bot.commands = new Discord.Collection();
+bot.commands = new Collection();
 const botCommands = require('./commands');
 
 Object.keys(botCommands).map(key => {
@@ -34,7 +35,7 @@ bot.on('ready', () => {
 });
 
 // Watch the message history for commands
-bot.on('message', msg => {
+bot.on('messageCreate', msg => {
   if(msg.author.bot) {
     return;
   }
