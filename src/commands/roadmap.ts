@@ -134,6 +134,11 @@ module.exports = {
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date ASC LIMIT 2').all();
         const first = JSON.parse(results[0].json);
         const last = JSON.parse(results[1].json);
+
+        let updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
+        let removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
+        let newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
+
         msg.reply('Results here:');
     }
 };
