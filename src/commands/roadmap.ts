@@ -144,9 +144,9 @@ module.exports = {
             if(d.length) {
                 const changes = d.map(x => ({change: x.path && x.path[0], val: x.val}));
                 if(changes.some(p => p.change === 'endDate' || p.change === 'title' || p.change === 'description')) {
-                    let update = `> ${f.title} has been updated:\n`;
+                    let update = `> **${f.title}** has been updated:\n`;
                     if(changes.some(p => p.change === 'endDate')) {
-                        update += `> End date has shifted from ${f.endDate} to ${l.endDate}\n`;
+                        update += `> End date has shifted from ${f.endDate} to ${l.endDate}\n`; // TODO update date format
                     }
                     if(changes.some(p => p.change === 'title')) {
                         update += `> Title has been updated from ${f.title} to ${l.title}\n`;
@@ -159,12 +159,10 @@ module.exports = {
             }
         });
 
-
-
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
 
-        Util.splitMessage(updated.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
+        Util.splitMessage(updated.join('\n'), {maxLength: 2000, char: '\n'}).forEach(message => {
             msg.channel.send(message);
         });
     }
