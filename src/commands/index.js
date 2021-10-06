@@ -1,4 +1,5 @@
 module.exports = {
     Ping: require('./ping'),
-    Verify: require('./verify')
+    Verify: require('./verify'),
+    Archive: require('./archive')
 };

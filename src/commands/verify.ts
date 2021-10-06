@@ -1,14 +1,16 @@
+import { Message, Client, ThreadChannel } from 'discord.js';
+import Database from 'better-sqlite3';
 module.exports = {
     name: '!verify',
     description: 'Attempts to verify the discord user on RSI',
-    execute(msg, args) {
+    execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');
             return;
         }
 
-        if(args.length === 1 || args.length > 2) {
-            msg.reply('Usage: !verify [RSI USERNAME]');
+        if(args.length !== 1) {
+            msg.reply('Usage: `!verify [RSI USERNAME]` to verify ownership of an RSI account');
             return;
         }
 
@@ -16,7 +18,7 @@ module.exports = {
 
         const exe = async () => {
             const lookup = async (username) => {
-                return await new Promise((resolve, reject) => {
+                return await new Promise((resolve, reject)=> {
                     require('https').get(`https://robertsspaceindustries.com/citizens/${username}`, (res) => {
                         if(res.statusCode === 404) { // Citizen does not exist
                             msg.reply('I could not find a citizen with that username!');
@@ -48,7 +50,7 @@ module.exports = {
                 }).catch(err => msg.reply('I\'ve had trouble contacting the RSI server. Please try again!'));
             };
     
-            const result = await lookup(args[1]);
+            const result = await lookup(args[0]);
 
             if(!result) {
                 return;
@@ -56,9 +58,8 @@ module.exports = {
 
             // Scan result for UUID
             const regex = /(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}/;
-            const resultUuid = regex.exec(result);
+            const resultUuid = regex.exec(result.toString());
 
-            const db = args[0];
             // Check to see if user is already in db
             const verification = db.prepare('SELECT * FROM verification WHERE discord_id = ?').get(msg.member.id);
 
@@ -99,10 +100,8 @@ module.exports = {
                 const role = msg.guild.roles.cache.find(role => role.name === roleName);
                 if(!role) {
                     msg.member.guild.roles.create({
-                        data: {
-                            name: roleName,
-                            color: 'BLUE',
-                        },
+                        name: roleName,
+                        color: 'BLUE',
                         reason: 'Need role for tagging verified members'
                     })
                     .then(r => {
@@ -120,5 +119,5 @@ module.exports = {
         };
 
         exe();
-    },
+    }
 };
