@@ -1,6 +1,7 @@
-import { Message } from 'discord.js';
+import { Message, Util } from 'discord.js';
 import Database from 'better-sqlite3';
 import * as https from 'https';
+import * as diff from 'recursive-diff';
 module.exports = {
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week',
@@ -135,10 +136,36 @@ module.exports = {
         const first = JSON.parse(results[0].json);
         const last = JSON.parse(results[1].json);
 
-        let updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
-        let removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
-        let newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
+        const updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
+        let updated = [];
+        updatedDeliverables.forEach(f => {
+            const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
+            const d = diff.getDiff(f, l);
+            if(d.length) {
+                const changes = d.map(x => ({change: x.path && x.path[0], val: x.val}));
+                if(changes.some(p => p.change === 'endDate' || p.change === 'title' || p.change === 'description')) {
+                    let update = `> ${f.title} has been updated:\n`;
+                    if(changes.some(p => p.change === 'endDate')) {
+                        update += `> End date has shifted from ${f.endDate} to ${l.endDate}\n`;
+                    }
+                    if(changes.some(p => p.change === 'title')) {
+                        update += `> Title has been updated from ${f.title} to ${l.title}\n`;
+                    }
+                    if(changes.some(p => p.change === 'description')) {
+                        update += `> Description has been updated from ${f.description} to ${l.description}\n`;
+                    }
+                    updated.push(update);
+                }
+            }
+        });
 
-        msg.reply('Results here:');
+
+
+        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
+        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
+
+        Util.splitMessage(updated.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
+            msg.channel.send(message);
+        });
     }
 };
