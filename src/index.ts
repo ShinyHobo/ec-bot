@@ -17,11 +17,12 @@ process.on('SIGINT', () => {
   db.close();
 });
 
+// check for archives that have been requested for renewal
+
 // Set up bot
 const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
 // Set up bot commands
 let commands = new Collection();
-// const botCommands = import('./commands');
 
 Object.keys(botCommands).map(key => {
   commands.set(botCommands[key].name, botCommands[key]);
@@ -32,6 +33,9 @@ bot.login(process.env.TOKEN);
 bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
+  // begin polling archived threads
+  botCommands.Archive.poll(bot)
+  setInterval(() => botCommands.Archive.poll(bot), 1000 * 30 * 60); // every 30 minutes
 });
 
 // Watch the message history for commands

@@ -8,7 +8,7 @@ module.exports = {
         }
 
         if(args.length === 1 || args.length > 2) {
-            msg.reply('Usage: !verify [RSI USERNAME]');
+            msg.reply('Usage: `!verify [RSI USERNAME]` to verify ownership of an RSI account');
             return;
         }
 
@@ -16,7 +16,7 @@ module.exports = {
 
         const exe = async () => {
             const lookup = async (username) => {
-                return await new Promise((resolve, reject) => {
+                return await new Promise((resolve, reject)=> {
                     require('https').get(`https://robertsspaceindustries.com/citizens/${username}`, (res) => {
                         if(res.statusCode === 404) { // Citizen does not exist
                             msg.reply('I could not find a citizen with that username!');
@@ -56,7 +56,7 @@ module.exports = {
 
             // Scan result for UUID
             const regex = /(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}/;
-            const resultUuid = regex.exec(result);
+            const resultUuid = regex.exec(result.toString());
 
             const db = args[0];
             // Check to see if user is already in db
