@@ -1,31 +1,57 @@
 import { Message, Client, ThreadChannel } from 'discord.js';
+import Database from 'better-sqlite3';
 module.exports = {
     name: '!archive',
     description: 'Manages server thread keepalives',
-    execute(msg: Message, args) {
+    execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');
             return;
         }
 
-        if(args.length === 1 || args.length > 2) {
-            msg.reply('Usage: `!archive [on/off]` to keep an archive alive indefinitely');
+        const usageTxt = 'Usage: `!archive [on/off]` to keep an archive alive indefinitely. Must be used in a thread.';
+
+        if(args.length !== 1) {
+            msg.reply(usageTxt);
             return;
         }
 
         if(msg.channel.isThread()) {
             // check if sufficient privledges
+            switch(args[0]) {
+                case 'on':
+                    // remove from db
+                    db.prepare('DELETE FROM threads WHERE id = ?').run([msg.channelId]);
+                    msg.reply(`Thread renewal off.`);
+                    break;
+                case 'off':
+                    // add to db
+                    db.prepare('INSERT OR IGNORE INTO threads VALUES (?)').run([msg.channelId]);
+                    msg.reply(`Thread renewal on.`);
+                    break;
+                default:
+                    msg.reply(usageTxt);
+                    break;
+            }
         } else {
             msg.reply('`!archive [on/off]` must must be used within a thread.');
         }
     },
-    poll(bot: Client) {
+    unarchiveAll(bot: Client, db: Database) {
         // look up stored threads here
-
-        // use collection of ids to fetch each channel
-        bot.channels.fetch('').then((thread: ThreadChannel) => {
-            thread.setArchived(false, "Auto-renew");
-        })
-        .catch(() => {});
+        const threads = db.prepare('SELECT * FROM threads').all();
+        threads.forEach((thread) => {
+            bot.channels.fetch(thread.id).then((thread: ThreadChannel) => {
+                thread.setArchived(false, "Auto-renew");
+            });
+        });
+    },
+    unarchive(thread: ThreadChannel, db: Database) {
+        if(thread.archived) {
+            const found = db.prepare('SELECT COUNT(*) FROM threads WHERE id = ?').get(thread.id)['COUNT(*)'];
+            if(found) {
+                thread.setArchived(false, "Auto-renew");
+            }
+        }
     }
 };
