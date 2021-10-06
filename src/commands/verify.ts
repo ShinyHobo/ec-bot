@@ -1,4 +1,4 @@
-import { Message, Client, ThreadChannel } from 'discord.js';
+import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
 module.exports = {
     name: '!verify',
