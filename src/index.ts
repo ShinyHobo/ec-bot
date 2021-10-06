@@ -45,7 +45,7 @@ bot.on('messageCreate', (msg: Message) => {
 
   let args = msg.content.split(/ +/);
   let command: any = args.shift().toLowerCase();
-  //console.info(`Called command: ${command}`);
+  console.info(`Called command: ${command}`);
 
   if (!commands.has(command)) return;
 
