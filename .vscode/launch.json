@@ -9,7 +9,7 @@
             "type": "node",
             "request": "launch",
             "runtimeExecutable": "nodemon",
-            "program": "${workspaceFolder}\\src\\index.js",
+            "program": "${workspaceFolder}\\src\\index.ts",
             "console": "integratedTerminal",
             "internalConsoleOptions": "neverOpen"
         }

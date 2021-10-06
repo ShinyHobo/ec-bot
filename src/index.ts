@@ -1,7 +1,11 @@
-require('dotenv').config();
+import dotenv from 'dotenv';
+import Database from 'better-sqlite3';
+import { Client, Intents, Collection } from 'discord.js';
+import * as botCommands from './commands/index.js';
+
+dotenv.config();
 
 // Set up database
-var Database = require('better-sqlite3');
 var db = new Database('ecdb.db');
 
 // Initialize database
@@ -14,24 +18,20 @@ process.on('SIGINT', () => {
 });
 
 // Set up bot
-const { Client, Intents, Collection } = require('discord.js');
 const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
-
 // Set up bot commands
-bot.commands = new Collection();
-const botCommands = require('./commands');
+let commands = new Collection();
+// const botCommands = import('./commands');
 
 Object.keys(botCommands).map(key => {
-  bot.commands.set(botCommands[key].name, botCommands[key]);
+  commands.set(botCommands[key].name, botCommands[key]);
 });
 
-const TOKEN = process.env.TOKEN;
-
-bot.login(TOKEN);
+bot.login(process.env.TOKEN);
 
 bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
-  bot.user.setPresence({ status: 'online', activity: { name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}});
+  bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
 });
 
 // Watch the message history for commands
@@ -41,14 +41,15 @@ bot.on('messageCreate', msg => {
   }
 
   let args = msg.content.split(/ +/);
-  const command = args.shift().toLowerCase();
+  let command: any = args.shift().toLowerCase();
   args = [db].concat(args);
   console.info(`Called command: ${command}`);
 
-  if (!bot.commands.has(command)) return;
+  if (!commands.has(command)) return;
 
   try {
-    bot.commands.get(command).execute(msg, args);
+    command = commands.get(command);
+    command.execute(msg, args);
   } catch (error) {
     console.error(error);
     msg.reply('There was an error trying to execute that command!');
