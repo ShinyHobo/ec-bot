@@ -17,7 +17,8 @@ module.exports = {
         }
 
         if(msg.channel.isThread()) {
-            // check if sufficient privledges
+            // TODO check if sufficient privileges
+            
             switch(args[0]) {
                 case 'on':
                     // remove from db
