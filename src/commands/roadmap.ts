@@ -1,4 +1,4 @@
-import { Message, Util } from 'discord.js';
+import { Message, Util, MessageAttachment } from 'discord.js';
 import Database from 'better-sqlite3';
 import * as https from 'https';
 import * as diff from 'recursive-diff';
@@ -132,7 +132,7 @@ module.exports = {
         return JSON.stringify(query);
     },
     compare(argv: Array<string>, msg: Message, db: Database) {
-        msg.reply('Calculating difference between roadmaps...');
+        msg.reply('Calculating differences between roadmaps...');
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date ASC LIMIT 2').all();
         const first = JSON.parse(results[0].json);
         const last = JSON.parse(results[1].json);
@@ -141,42 +141,56 @@ module.exports = {
         
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
         if(removedDeliverables.length) {
-            messages.push('> The following deliverables have been *removed*:\n');
-            removedDeliverables.forEach(d => messages.push(_.unescape(`> \* **${d.title}**\n`.toString())));
+            messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
+            removedDeliverables.forEach(d => messages.push(_.unescape(`\* ${d.title}\n\n`.toString())));
+            messages.push('===================================================================================================\n\n');
         }
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
         if(newDeliverables.length) {
-            messages.push('> The following deliverables have been *added*:\n');
-            newDeliverables.forEach(d => messages.push(_.unescape(`> \* **${d.title}**\n`.toString())));
+            messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
+            newDeliverables.forEach(d => {
+                const start = new Date(d.startDate).toDateString();
+                const end = new Date(d.endDate).toDateString();
+                messages.push(_.unescape(`\* **${d.title}**\n`.toString()));
+                messages.push(_.unescape(`${start} => ${end}\n`.toString()));
+                messages.push(_.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
+            });
+            messages.push('===================================================================================================\n\n');
         }
 
         const updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
-        updatedDeliverables.forEach(f => {
-            const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
-            const d = diff.getDiff(f, l);
-            if(d.length) {
-                const changes = d.map(x => ({change: x.path && x.path[0], val: x.val}));
-                if(changes.some(p => p.change === 'endDate' || p.change === 'title' || p.change === 'description')) {
-                    let update = `> **${f.title}** has been *updated*:\n`;
-                    if(changes.some(p => p.change === 'endDate')) {
-                        const oldDate = new Date(f.endDate).toDateString();
-                        const newDate = new Date(l.endDate).toDateString();
-                        update += `> End date has shifted from ${oldDate} to ${newDate}\n`; // TODO update date format
+        if(updatedDeliverables.length) {
+            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
+            updatedDeliverables.forEach(f => {
+                const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
+                const d = diff.getDiff(f, l);
+                if(d.length) {
+                    const changes = d.map(x => ({change: x.path && x.path[0], val: x.val}));
+                    if(changes.some(p => p.change === 'endDate' || p.change === 'title' || p.change === 'description')) {
+                        const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
+                        let update = `\* **${title}**\n`;
+                        if(changes.some(p => p.change === 'endDate')) {
+                            const oldDate = new Date(f.endDate).toDateString();
+                            const newDate = new Date(l.endDate).toDateString();
+                            update += `End date has shifted from ${oldDate} to ${newDate}\n`;
+                        }
+                        if(changes.some(p => p.change === 'title')) {
+                            update += `Title has been updated from ${f.title} to ${l.title}\n`;
+                        }
+                        if(changes.some(p => p.change === 'description')) {
+                            update += `Description has been updated from ${f.description} to ${l.description}\n`;
+                        }
+                        messages.push(_.unescape(update + '\n'));
                     }
-                    if(changes.some(p => p.change === 'title')) {
-                        update += `> Title has been updated from ${f.title} to ${l.title}\n`;
-                    }
-                    if(changes.some(p => p.change === 'description')) {
-                        update += `> Description has been updated from ${f.description} to ${l.description}\n`;
-                    }
-                    messages.push(_.unescape(update));
                 }
-            }
-        });
+            });
+        }
 
-        Util.splitMessage(messages.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
-            msg.channel.send(message);
-        });
+        msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[1].date}.md`)]});
+
+        // Util.splitMessage(messages.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
+        //     msg.channel.send(message);
+        // });
     }
 };
