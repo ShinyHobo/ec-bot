@@ -13,8 +13,10 @@
     "better-sqlite3": "^7.4.3",
     "discord.js": "^13.2.0",
     "dotenv": "^8.2.0",
+    "he": "^1.2.0",
     "https": "^1.0.0",
     "jsdom": "^17.0.0",
+    "recursive-diff": "^1.0.8",
     "ts-node": "^10.2.1",
     "uuid": "^8.3.2"
   }

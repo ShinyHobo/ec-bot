@@ -11,6 +11,7 @@ var db = new Database('ecdb.db');
 // Initialize database
 db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
 db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
+db.prepare("CREATE TABLE IF NOT EXISTS roadmap(json TEXT, date INTEGER, PRIMARY KEY(date))").run();
 
 // Closes database connection on server shutdown
 process.on('SIGINT', () => {
@@ -45,7 +46,7 @@ bot.on('messageCreate', (msg: Message) => {
 
   let args = msg.content.split(/ +/);
   let command: any = args.shift().toLowerCase();
-  //console.info(`Called command: ${command}`);
+  console.info(`Called command: ${command}`);
 
   if (!commands.has(command)) return;
 

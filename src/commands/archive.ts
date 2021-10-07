@@ -3,16 +3,15 @@ import Database from 'better-sqlite3';
 module.exports = {
     name: '!archive',
     description: 'Manages server thread keepalives',
+    usageTxt: 'Usage: `!archive [on/off]` to keep an archive alive indefinitely. Must be used in a thread.',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');
             return;
         }
 
-        const usageTxt = 'Usage: `!archive [on/off]` to keep an archive alive indefinitely. Must be used in a thread.';
-
         if(args.length !== 1) {
-            msg.reply(usageTxt);
+            msg.reply(this.usage);
             return;
         }
 
@@ -31,7 +30,7 @@ module.exports = {
                     msg.reply(`Thread renewal on.`);
                     break;
                 default:
-                    msg.reply(usageTxt);
+                    msg.reply(this.usage);
                     break;
             }
         } else {
