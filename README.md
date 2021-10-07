@@ -4,7 +4,9 @@ Discord bot for Enemy Contact
 ## Commands
 - !ping: Replies with pong.
 - !verify [RSI USERNAME]: Attempts to verify that Discord account owns RSI user.
-- !archive [on/off]: Turns auto renewal on/off.
+- !renew [on/off]: Turns thread auto renewal on/off.
+- !roadmap [pull/compare]: Pulls down current state of roadmap and compares the most recent pull to the previous.
+- !help: Shows all commands
 
 ## Setup
 Add a .env file to the root containing "TOKEN=[BOT TOKEN HERE]"
