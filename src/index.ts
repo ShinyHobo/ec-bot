@@ -2,20 +2,21 @@ import dotenv from 'dotenv';
 import Database from 'better-sqlite3';
 import { Client, Intents, Collection, ThreadChannel, Message } from 'discord.js';
 import * as botCommands from './commands/index.js';
+import Migration from './migration';
 
 dotenv.config();
 
 // Set up database
-var db = new Database('ecdb.db');
+const db = new Database('ecdb.db');
 
-// Initialize database
-db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
-db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
-db.prepare("CREATE TABLE IF NOT EXISTS roadmap(json TEXT, date INTEGER, PRIMARY KEY(date))").run();
+// Run db migrations
+Migration.run(db);
 
 // Closes database connection on server shutdown
 process.on('SIGINT', () => {
-  db.close();
+  try {
+    db.close();
+  } catch(ex) {}
 });
 
 // Set up bot
