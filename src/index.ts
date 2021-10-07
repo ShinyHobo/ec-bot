@@ -18,10 +18,8 @@ process.on('SIGINT', () => {
   db.close();
 });
 
-// check for archives that have been requested for renewal
-
 // Set up bot
-const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES] });
+const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES], partials: ["CHANNEL"] });
 // Set up bot commands
 let commands = new Collection();
 
@@ -35,7 +33,7 @@ bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
   // Unarchive archived threads
-  botCommands.Archive.unarchiveAll(bot, db);
+  botCommands.Renew.unarchiveAll(bot, db);
 });
 
 // Watch the message history for commands

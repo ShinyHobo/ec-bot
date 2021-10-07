@@ -1,9 +1,9 @@
 import { Message, Client, ThreadChannel } from 'discord.js';
 import Database from 'better-sqlite3';
 module.exports = {
-    name: '!archive',
+    name: '!renew',
     description: 'Manages server thread autorenewals. Must be used in a thread.',
-    usage: 'Usage: `!archive [on/off]`',
+    usage: 'Usage: `!renew [on/off]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');
@@ -20,21 +20,21 @@ module.exports = {
             
             switch(args[0]) {
                 case 'on':
-                    // remove from db
-                    db.prepare('DELETE FROM threads WHERE id = ?').run([msg.channelId]);
-                    msg.reply(`Thread renewal off.`);
-                    break;
-                case 'off':
                     // add to db
                     db.prepare('INSERT OR IGNORE INTO threads VALUES (?)').run([msg.channelId]);
                     msg.reply(`Thread renewal on.`);
+                    break;
+                case 'off':
+                    // remove from db
+                    db.prepare('DELETE FROM threads WHERE id = ?').run([msg.channelId]);
+                    msg.reply(`Thread renewal off.`);
                     break;
                 default:
                     msg.reply(this.usage);
                     break;
             }
         } else {
-            msg.reply('`!archive [on/off]` must must be used within a thread.');
+            msg.reply('`!renew [on/off]` must must be used within a thread.');
         }
     },
     unarchiveAll(bot: Client, db: Database) {
