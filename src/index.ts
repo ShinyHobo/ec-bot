@@ -58,5 +58,5 @@ bot.on('messageCreate', (msg: Message) => {
 });
 
 bot.on('threadUpdate', (oldThread: ThreadChannel, newThread: ThreadChannel) => {
-  botCommands.Archive.unarchive(newThread, db);
+  botCommands.Renew.unarchive(newThread, db);
 });
