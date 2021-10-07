@@ -6,7 +6,7 @@ module.exports = {
     usage: 'Usage: `!help`',
     execute(msg: Message, args: Array<string>, db: Database) {
         let messages: Array<string> = [];
-        const botCommands = import('../commands/index.js').then(botCommands => {
+        import('../commands/index.js').then(botCommands => {
             Object.keys(botCommands).forEach(key => {
                 if(key !== 'default') {
                     const command = botCommands[key];
