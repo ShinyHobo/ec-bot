@@ -16,7 +16,11 @@ module.exports = {
         }
 
         if(msg.channel.isThread()) {
-            // TODO check if sufficient privileges
+            const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
+            if(officer && msg.member.roles.highest.comparePositionTo(officer)) {
+                // inufficient privileges
+                return;
+            }
             
             switch(args[0]) {
                 case 'on':
