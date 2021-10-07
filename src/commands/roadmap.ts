@@ -132,6 +132,7 @@ module.exports = {
         return JSON.stringify(query);
     },
     compare(argv: Array<string>, msg: Message, db: Database) {
+        // TODO add start/end filter
         msg.reply('Calculating differences between roadmaps...');
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date ASC LIMIT 2').all();
         const first = JSON.parse(results[0].json);
