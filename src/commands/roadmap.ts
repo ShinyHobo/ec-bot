@@ -143,7 +143,10 @@ module.exports = {
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
-            removedDeliverables.forEach(d => messages.push(he.unescape(`\* ${d.title}\n\n`.toString())));
+            removedDeliverables.forEach(d => {
+                messages.push(he.unescape(`\* ${d.title}\n`.toString()))
+                messages.push(he.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
+            });
             messages.push('===================================================================================================\n\n');
         }
 
