@@ -2,8 +2,8 @@ import { Message, Client, ThreadChannel } from 'discord.js';
 import Database from 'better-sqlite3';
 module.exports = {
     name: '!archive',
-    description: 'Manages server thread keepalives',
-    usageTxt: 'Usage: `!archive [on/off]` to keep an archive alive indefinitely. Must be used in a thread.',
+    description: 'Manages server thread autorenewals. Must be used in a thread.',
+    usage: 'Usage: `!archive [on/off]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');

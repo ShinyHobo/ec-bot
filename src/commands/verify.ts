@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 module.exports = {
     name: '!verify',
     description: 'Attempts to verify the discord user on RSI',
-    usage: 'Usage: `!verify [RSI USERNAME]` to verify ownership of an RSI account',
+    usage: 'Usage: `!verify [RSI USERNAME]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!');

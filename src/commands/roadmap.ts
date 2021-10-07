@@ -5,7 +5,7 @@ import * as diff from 'recursive-diff';
 import * as he from 'he';
 module.exports = {
     name: '!roadmap',
-    description: 'Keeps track of roadmap changes from week to week',
+    description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
     usage: 'Usage: `!roadmap [pull/compare]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(args.length !== 1) {
