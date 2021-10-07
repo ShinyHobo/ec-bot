@@ -2,7 +2,7 @@ import { Message, Util, MessageAttachment } from 'discord.js';
 import Database from 'better-sqlite3';
 import * as https from 'https';
 import * as diff from 'recursive-diff';
-import * as _ from 'underscore';
+import * as he from 'he';
 module.exports = {
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week',
@@ -142,7 +142,7 @@ module.exports = {
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
-            removedDeliverables.forEach(d => messages.push(_.unescape(`\* ${d.title}\n\n`.toString())));
+            removedDeliverables.forEach(d => messages.push(he.unescape(`\* ${d.title}\n\n`.toString())));
             messages.push('===================================================================================================\n\n');
         }
 
@@ -152,9 +152,9 @@ module.exports = {
             newDeliverables.forEach(d => {
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(_.unescape(`\* **${d.title}**\n`.toString()));
-                messages.push(_.unescape(`${start} => ${end}\n`.toString()));
-                messages.push(_.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
+                messages.push(he.unescape(`\* **${d.title}**\n`.toString()));
+                messages.push(he.unescape(`${start} => ${end}\n`.toString()));
+                messages.push(he.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
             });
             messages.push('===================================================================================================\n\n');
         }
@@ -181,7 +181,7 @@ module.exports = {
                         if(changes.some(p => p.change === 'description')) {
                             update += `Description has been updated from ${f.description} to ${l.description}\n`;
                         }
-                        messages.push(_.unescape(update + '\n'));
+                        messages.push(he.unescape(update + '\n'));
                     }
                 }
             });
