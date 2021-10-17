@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import * as https from 'https';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
+import * as _ from 'lodash';
 module.exports = {
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
@@ -90,8 +91,22 @@ module.exports = {
         let delta = Date.now() - start;
         console.log(`Deliverables: ${data.length} in ${Math.floor(delta / 1000)} seconds`);
         const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
-        db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([JSON.stringify(data, null, 2), dbDate]);
-        msg.reply(`Roadmap retrieval returned ${data.length} deliverables in ${Math.floor(delta / 1000)} seconds. Type \`!roadmap compare\` to compare to the last update!`);
+        const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
+        const newRoadmap = JSON.stringify(data, null, 2)
+
+        let insert = !existingRoadmap;
+        
+        if(existingRoadmap) {
+            insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+        }
+
+        if(insert) {
+            db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
+            msg.reply(`Roadmap retrieval returned ${data.length} deliverables in ${Math.floor(delta / 1000)} seconds. Type \`!roadmap compare\` to compare to the last update!`);
+            this.compare([], msg, db);
+        } else {
+            msg.reply('No changes have been detected since the last pull.');
+        }
     },
     async getResponse(data) {
         return await new Promise((resolve, reject) => {
@@ -140,9 +155,9 @@ module.exports = {
     compare(argv: Array<string>, msg: Message, db: Database) {
         // TODO add start/end filter
         msg.reply('Calculating differences between roadmaps...');
-        const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date ASC LIMIT 2').all();
-        const first = JSON.parse(results[0].json);
-        const last = JSON.parse(results[1].json);
+        const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
+        const first = JSON.parse(results[1].json);
+        const last = JSON.parse(results[0].json);
 
         let messages = [];
         
