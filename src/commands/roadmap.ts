@@ -156,6 +156,10 @@ module.exports = {
         // TODO add start/end filter
         msg.reply('Calculating differences between roadmaps...');
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
+        if(!results || results.length < 2) {
+            msg.reply('More than one roadmap snapshot is needed to compare. Pull and try again later.');
+            return;
+        }
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
 
