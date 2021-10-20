@@ -205,7 +205,7 @@ module.exports = {
                             update += `End date has shifted from ${oldDate} to ${newDate}\n`;
                         }
                         if(changes.some(p => p.change === 'title')) {
-                            update += `Title has been updated from ${f.title} to ${l.title}\n`;
+                            update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
                         }
                         if(changes.some(p => p.change === 'description')) {
                             update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
