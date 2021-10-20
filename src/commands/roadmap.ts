@@ -190,7 +190,8 @@ module.exports = {
 
         const updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
         if(updatedDeliverables.length) {
-            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
+            let updatedMessages = [];
+            let updateCount = 0;
             updatedDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
                 const d = diff.getDiff(f, l);
@@ -210,10 +211,14 @@ module.exports = {
                         if(changes.some(p => p.change === 'description')) {
                             update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
-                        messages.push(he.unescape(update + '\n'));
+                        updatedMessages.push(he.unescape(update + '\n'));
+                        updateCount++;
                     }
                 }
             });
+            messages.push(`[${updateCount}] deliverable(s) *updated*:\n`);
+            messages = messages.concat(updatedMessages);
+            messages.push(`[${updatedDeliverables.length - updateCount}] deliverable(s) *unchanged*`);
         }
 
         msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]});
