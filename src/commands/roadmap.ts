@@ -14,11 +14,11 @@ module.exports = {
             return;
         }
 
-        const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
-        if(officer && !msg.member.roles.highest.comparePositionTo(officer)) {
-            // inufficient privileges
-            return;
-        }
+        // const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
+        // if(officer && !msg.member.roles.highest.comparePositionTo(officer)) {
+        //     // inufficient privileges
+        //     return;
+        // }
 
         switch(args[0]) {
             case 'pull':
