@@ -170,7 +170,7 @@ module.exports = {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
             removedDeliverables.forEach(d => {
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()))
-                messages.push(he.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
+                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
             });
             messages.push('===================================================================================================\n\n');
         }
@@ -183,7 +183,7 @@ module.exports = {
                 const end = new Date(d.endDate).toDateString();
                 messages.push(he.unescape(`\* **${d.title}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
-                messages.push(he.unescape(`${d.description.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n\n`.toString()));
+                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
             });
             messages.push('===================================================================================================\n\n');
         }
@@ -208,7 +208,7 @@ module.exports = {
                             update += `Title has been updated from ${f.title} to ${l.title}\n`;
                         }
                         if(changes.some(p => p.change === 'description')) {
-                            update += `Description has been updated from ${f.description} to ${l.description}\n`;
+                            update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
                         messages.push(he.unescape(update + '\n'));
                     }
@@ -216,10 +216,13 @@ module.exports = {
             });
         }
 
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[1].date}.md`)]});
+        msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]});
 
         // Util.splitMessage(messages.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
         //     msg.channel.send(message);
         // });
+    },
+    shortenText(text) {
+        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     }
 };
