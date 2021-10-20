@@ -18,7 +18,7 @@ module.exports = {
         if(msg.channel.isThread()) {
             const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
             if(officer && msg.member.roles.highest.comparePositionTo(officer) < 0) {
-                // inufficient privileges
+                msg.reply("You have insufficient privileges. An officer or above is required.");
                 return;
             }
             
