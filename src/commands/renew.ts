@@ -46,7 +46,12 @@ module.exports = {
         const threads = db.prepare('SELECT * FROM threads').all();
         threads.forEach((thread) => {
             bot.channels.fetch(thread.id).then((thread: ThreadChannel) => {
-                thread.setArchived(false, "Auto-renew");
+                if(thread.archived) {
+                    thread.setArchived(false, "Auto-renew").catch(error => {
+                        console.info(`Failed to auto-renew ${thread.name} with id ${thread.id}`);
+                        console.info(error);
+                    });
+                }
             });
         });
     },
