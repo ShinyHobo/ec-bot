@@ -6,19 +6,19 @@ module.exports = {
     usage: 'Usage: `!renew [on/off]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
-            msg.reply('Command must be run from within server!');
+            msg.reply('Command must be run from within server!').catch(console.error);
             return;
         }
 
         if(args.length !== 1) {
-            msg.reply(this.usage);
+            msg.reply(this.usage).catch(console.error);
             return;
         }
 
         if(msg.channel.isThread()) {
             const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
             if(officer && msg.member.roles.highest.comparePositionTo(officer) < 0) {
-                msg.reply("You have insufficient privileges. An officer or above is required.");
+                msg.reply("You have insufficient privileges. An officer or above is required.").catch(console.error);
                 return;
             }
             
@@ -26,19 +26,19 @@ module.exports = {
                 case 'on':
                     // add to db
                     db.prepare('INSERT OR IGNORE INTO threads VALUES (?)').run([msg.channelId]);
-                    msg.reply(`Thread renewal on.`);
+                    msg.reply(`Thread renewal on.`).catch(console.error);
                     break;
                 case 'off':
                     // remove from db
                     db.prepare('DELETE FROM threads WHERE id = ?').run([msg.channelId]);
-                    msg.reply(`Thread renewal off.`);
+                    msg.reply(`Thread renewal off.`).catch(console.error);
                     break;
                 default:
-                    msg.reply(this.usage);
+                    msg.reply(this.usage).catch(console.error);
                     break;
             }
         } else {
-            msg.reply('`!renew [on/off]` must must be used within a thread.');
+            msg.reply('`!renew [on/off]` must must be used within a thread.').catch(console.error);
         }
     },
     unarchiveAll(bot: Client, db: Database) {

@@ -54,7 +54,7 @@ bot.on('messageCreate', (msg: Message) => {
     command.execute(msg, args, db);
   } catch (error) {
     console.error(error);
-    msg.reply('There was an error trying to execute that command!');
+    msg.reply('There was an error trying to execute that command!').catch(console.error);
   }
 });
 

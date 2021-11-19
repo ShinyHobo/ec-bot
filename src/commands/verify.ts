@@ -6,23 +6,23 @@ module.exports = {
     usage: 'Usage: `!verify [RSI USERNAME]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
-            msg.reply('Command must be run from within server!');
+            msg.reply('Command must be run from within server!').catch(console.error);
             return;
         }
 
         if(args.length !== 1) {
-            msg.reply(this.usage);
+            msg.reply(this.usage).catch(console.error);
             return;
         }
 
-        const noMsg = () => {msg.reply('please ensure you allow messages from server members and try again.');};
+        const noMsg = () => {msg.reply('please ensure you allow messages from server members and try again.').catch(console.error);};
 
         const exe = async () => {
             const lookup = async (username) => {
                 return await new Promise((resolve, reject)=> {
                     require('https').get(`https://robertsspaceindustries.com/citizens/${username}`, (res) => {
                         if(res.statusCode === 404) { // Citizen does not exist
-                            msg.reply('I could not find a citizen with that username!');
+                            msg.reply('I could not find a citizen with that username!').catch(console.error);
                             resolve(false);
                         } else if(res.statusCode === 200) { // Citizen exists, check for code
                             let data = '';
@@ -42,13 +42,13 @@ module.exports = {
                                 resolve('this is not a uuid');
                             });
                         } else {
-                            msg.reply('there was no response from RSI server!');
+                            msg.reply('there was no response from RSI server!').catch(console.error);
                             resolve(false);
                         }
                     }).on('error', (error) => {
                       reject(error);
                     });
-                }).catch(err => msg.reply('I\'ve had trouble contacting the RSI server. Please try again!'));
+                }).catch(err => msg.reply('I\'ve had trouble contacting the RSI server. Please try again!').catch(console.error));
             };
     
             const result = await lookup(args[0]);
@@ -71,28 +71,28 @@ module.exports = {
                 // create code and send
                 db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
                 msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
-                    .then(() => msg.reply('please check your DMs for your verification code.'))
+                    .then(() => msg.reply('please check your DMs for your verification code.').catch(console.error))
                     .catch(() => noMsg());
             } else if(!verification && resultUuid) {
                 // create code and send, tell to remove existing code
                 db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
                 msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun 
                     the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
-                    .then(() => msg.reply('please check your DMs for your verification code.'))
+                    .then(() => msg.reply('please check your DMs for your verification code.').catch(console.error))
                     .catch(() => noMsg());
             } else if(verification && !resultUuid) {
                 // send old code reminder
                 msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``)
-                    .then(() => msg.reply('please check your DMs for your verification code.'))    
+                    .then(() => msg.reply('please check your DMs for your verification code.').catch(console.error))    
                     .catch(() => noMsg());
             } else if(verification.code === resultUuid[0]) {
                 // if uuid matches
                 const giveRole = (role) => {
                     msg.member.roles.add(role);
                     if(!msg.member.roles.cache.has(role.id)) {
-                        msg.reply('your RSI user has been verified');
+                        msg.reply('your RSI user has been verified').catch(console.error);
                     } else {
-                        msg.reply('your RSI user has been reverified');
+                        msg.reply('your RSI user has been reverified').catch(console.error);
                     }
                 };
 
