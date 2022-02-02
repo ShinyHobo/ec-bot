@@ -10,7 +10,7 @@ module.exports = {
     usage: 'Usage: `!roadmap [pull/compare]`',
     execute(msg: Message, args: Array<string>, db: Database) {
         if(args.length !== 1) {
-            msg.reply(this.usage).catch(console.error);
+            msg.channel.send(this.usage).catch(console.error);
             return;
         }
 
@@ -28,7 +28,7 @@ module.exports = {
                 this.compare([], msg, db);
                 break;
             default:
-                msg.reply(this.usage).catch(console.error);
+                msg.channel.send(this.usage).catch(console.error);
                 break;
         }
     },
@@ -58,7 +58,7 @@ module.exports = {
         },
     },
     async lookup(argv: Array<string>, msg: Message, db: Database) {
-        msg.reply('Retrieving roadmap state...').catch(console.error);
+        msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
         let metaData = [];
         let data = [];
@@ -102,10 +102,10 @@ module.exports = {
 
         if(insert) {
             db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
-            msg.reply(`Roadmap retrieval returned ${data.length} deliverables in ${Math.floor(delta / 1000)} seconds. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+            msg.channel.send(`Roadmap retrieval returned ${data.length} deliverables in ${Math.floor(delta / 1000)} seconds. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
             this.compare([], msg, db);
         } else {
-            msg.reply('No changes have been detected since the last pull.').catch(console.error);
+            msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
         }
     },
     async getResponse(data) {
@@ -154,10 +154,10 @@ module.exports = {
     },
     compare(argv: Array<string>, msg: Message, db: Database) {
         // TODO add start/end filter
-        msg.reply('Calculating differences between roadmaps...').catch(console.error);
+        msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
         if(!results || results.length < 2) {
-            msg.reply('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
+            msg.channel.send('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
             return;
         }
         const first = JSON.parse(results[1].json);
