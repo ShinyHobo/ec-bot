@@ -7,8 +7,8 @@ import * as _ from 'lodash';
 import * as fs from 'fs';
 import * as path from 'path';
 module.exports = {
-    deliverablesQuery: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8'),
-    teamsQuery: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8'),
+    deliverablesGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8'),
+    teamsGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8'),
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
     usage: 'Usage: `!roadmap [pull/compare]`',
@@ -139,15 +139,15 @@ module.exports = {
             req.end();
         });
     },
-    query(offset=0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+    deliverablesQuery(offset: number =0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
         let query: any = {
             operationName: "deliverables",
-            query: this.deliverablesQuery,
+            query: this.deliverablesGraphql,
             variables: {
+                "startDate": "2020-01-01",
                 "endDate": "2023-12-31",
                 "limit": 20,
                 "offset": offset,
-                "startDate": "2020-01-01",
                 "sortBy": `${sortBy}`
             }
         };
@@ -160,6 +160,22 @@ module.exports = {
             query.categoryIds = JSON.stringify(categoryIds);
         }
         
+        return JSON.stringify(query);
+    },
+    teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
+        let query: any = {
+            operationName: "teams",
+            query: this.teamsGraphql,
+            variables: {
+                "startDate": "2020-01-01",
+                "endDate": "2050-12-31",
+                "limit": 20,
+                "offset": offset,
+                "sortBy": `${sortBy}`,
+                "deliverableSlug": deliverableSlug,
+            }
+        };
+
         return JSON.stringify(query);
     },
     compare(argv: Array<string>, msg: Message, db: Database) {
