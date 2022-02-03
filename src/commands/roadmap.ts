@@ -4,6 +4,8 @@ import * as https from 'https';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
 import * as _ from 'lodash';
+import * as fs from 'fs';
+import * as path from 'path';
 module.exports = {
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
@@ -136,9 +138,10 @@ module.exports = {
         });
     },
     query(offset=0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+        let graphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8');
         let query: any = {
             operationName: "deliverables",
-            query: "query deliverables($startDate: String!, $endDate: String!, $search: String, $deliverableSlug: String, $teamSlug: String, $projectSlugs: [String], $categoryIds: [Int], $sortBy: SortMethod, $offset: Int, $limit: Int) {\n  progressTracker {\n    deliverables(\n      startDate: $startDate\n      endDate: $endDate\n      search: $search\n      deliverableSlug: $deliverableSlug\n      teamSlug: $teamSlug\n      projectSlugs: $projectSlugs\n      categoryIds: $categoryIds\n      sortBy: $sortBy\n      offset: $offset\n      limit: $limit\n    ) {\n      totalCount\n      metaData {\n        ...Deliverable\n        card {\n          ...Card\n          __typename\n        }\n        projects {\n          ...Project\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment Deliverable on Deliverable {\n  uuid\n  slug\n  title\n  description\n  startDate\n  endDate\n  numberOfDisciplines\n  numberOfTeams\n  updateDate\n  totalCount\n  __typename\n}\n\nfragment Card on Card {\n  id\n  title\n  description\n  category\n  release {\n    id\n    title\n    __typename\n  }\n  board {\n    id\n    title\n    __typename\n  }\n  updateDate\n  thumbnail\n  __typename\n}\n\nfragment Project on Project {\n  title\n  logo\n  __typename\n}\n",
+            query: graphql,
             variables: {
                 "endDate": "2023-12-31",
                 "limit": 20,
