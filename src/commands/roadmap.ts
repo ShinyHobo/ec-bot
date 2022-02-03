@@ -7,6 +7,8 @@ import * as _ from 'lodash';
 import * as fs from 'fs';
 import * as path from 'path';
 module.exports = {
+    deliverablesQuery: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8'),
+    teamsQuery: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8'),
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
     usage: 'Usage: `!roadmap [pull/compare]`',
@@ -96,7 +98,7 @@ module.exports = {
             }
             
             let delta = Date.now() - start;
-            console.log(`Deliverables: ${data.length} in ${delta} microseconds`);
+            console.log(`Deliverables: ${data.length} in ${delta} milliseconds`);
             const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
             const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
             const newRoadmap = JSON.stringify(data, null, 2)
@@ -138,10 +140,9 @@ module.exports = {
         });
     },
     query(offset=0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
-        let graphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8');
         let query: any = {
             operationName: "deliverables",
-            query: graphql,
+            query: this.deliverablesQuery,
             variables: {
                 "endDate": "2023-12-31",
                 "limit": 20,
