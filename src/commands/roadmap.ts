@@ -49,6 +49,10 @@ module.exports = {
         ShipsAndVehicles: 6,
         WeaponsAndItems: 7
     }),
+    QueryTypeEnum: Object.freeze({
+        Deliverables: 1,
+        Teams: 2
+    }),
     ProjectEnum: Object.freeze({
         SQ42: "el2codyca4mnx",
         SC: "ekm24a6ywr3o3"
@@ -64,61 +68,75 @@ module.exports = {
     async lookup(argv: Array<string>, msg: Message, db: Database) {
         msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
-        let data = [];
+        let deliverables = [];
         let offset = 0;
         const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
-        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, sortBy)); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
-        let queries = [];
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        let deliverablePromises = [];
 
         do {
-            queries.push(this.getResponse(this.deliverablesQuery(offset, sortBy)));
+            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
-        Promise.all(queries).then((responses)=>{
+        Promise.all(deliverablePromises).then((responses)=>{
+            let teamPromises = [];
             responses.forEach((response)=>{
                 let metaData = response.metaData;
-                data = data.concat(metaData);
+                deliverables = deliverables.concat(metaData);
             });
+
             // only show tasks that complete in the future
             if('n' in argv) {
                 const now = Date.now();
-                data = data.filter(d => new Date(d.endDate).getTime() > now);
+                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
             }
             
             // only show tasks that have expired or been completed
             if('o' in argv) {
                 const now = Date.now();
-                data = data.filter(d => new Date(d.endDate).getTime() <= now);
+                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
             }
             
             // sort by soonest expiring
             if('e' in argv) {
-                data.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-            }
-            
-            let delta = Date.now() - start;
-            console.log(`Deliverables: ${data.length} in ${delta} milliseconds`);
-            const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
-            const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
-            const newRoadmap = JSON.stringify(data, null, 2)
-
-            let insert = !existingRoadmap;
-            
-            if(existingRoadmap) {
-                insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
             }
 
-            if(insert) {
-                db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
-                msg.channel.send(`Roadmap retrieval returned ${data.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                this.compare([], msg, db);
-            } else {
-                msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-            }
+            deliverables.forEach((d) => {
+                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams));
+            });
+
+            Promise.all(teamPromises).then((responses) => {
+                responses.forEach((response, index)=>{
+                    // order is preserved, team index matches deliverable index
+                    let metaData = response.metaData;
+                    deliverables[index].teams = metaData;
+                });
+                
+                let delta = Date.now() - start;
+                console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
+                const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
+                const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
+                const newRoadmap = JSON.stringify(deliverables, null, 2)
+
+                let insert = !existingRoadmap;
+                
+                if(existingRoadmap) {
+                    insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                }
+
+                if(insert) {
+                    db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
+                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                    this.compare([], msg, db);
+                } else {
+                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                }
+            });
         });
     },
-    async getResponse(data) {
+    async getResponse(data, type) {
         return await new Promise((resolve, reject) => {
             const req = https.request(this.options, (res) => {
               let data = '';
@@ -127,7 +145,17 @@ module.exports = {
                 data += d;
               });
               res.on('end', () => {
-                resolve(JSON.parse(data).data.progressTracker.deliverables)
+                switch(type){
+                    case 1: // Deliverables
+                        resolve(JSON.parse(data).data.progressTracker.deliverables);
+                        break;
+                    case 2: // Teams 
+                        resolve(JSON.parse(data).data.progressTracker.teams);
+                        break;
+                    default:
+                        reject(`Invalid response query type ${type}`);
+                        break;
+                }
               });
             });
     
