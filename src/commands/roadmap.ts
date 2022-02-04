@@ -67,11 +67,11 @@ module.exports = {
         let data = [];
         let offset = 0;
         const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
-        const initialResponse = await this.getResponse(this.query(offset, sortBy)); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, sortBy)); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let queries = [];
 
         do {
-            queries.push(this.getResponse(this.query(offset, sortBy)));
+            queries.push(this.getResponse(this.deliverablesQuery(offset, sortBy)));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
