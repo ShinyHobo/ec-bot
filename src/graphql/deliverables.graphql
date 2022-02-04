@@ -17,17 +17,17 @@ query deliverables($startDate: String!, $endDate: String!, $search: String, $del
         ...Deliverable
         card {
           ...Card
-          __typename
+          #__typename
         }
         projects {
           ...Project
-          __typename
+          #__typename
         }
-        __typename
+        #__typename
       }
-      __typename
+      #__typename
     }
-    __typename
+    #__typename
   }
 }
 
@@ -42,7 +42,7 @@ fragment Deliverable on Deliverable {
   numberOfTeams
   updateDate
   totalCount
-  __typename
+  #__typename
 }
 
 fragment Card on Card {
@@ -53,20 +53,20 @@ fragment Card on Card {
   release {
     id
     title
-    __typename
+    #__typename
   }
   board {
     id
     title
-    __typename
+    #__typename
   }
   updateDate
   thumbnail
-  __typename
+  #__typename
 }
 
 fragment Project on Project {
   title
   logo
-  __typename
+  #__typename
 }

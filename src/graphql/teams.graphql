@@ -17,13 +17,13 @@ query teams($startDate: String!, $endDate: String!, $search: String, $teamSlug: 
         ...Team
         timeAllocations {
           ...TimeAllocation
-          __typename
+          # __typename
         }
-        __typename
+        # __typename
       }
-      __typename
+      # __typename
     }
-    __typename
+    # __typename
   }
 }
 
@@ -44,5 +44,5 @@ fragment TimeAllocation on TimeAllocation {
   endDate
   uuid
   partialTime
-  __typename
+  # __typename
 }
