@@ -52,6 +52,8 @@ module.exports = {
                         console.info(error);
                     });
                 }
+            }).catch(e=>{
+                db.prepare('DELETE FROM threads WHERE id = ?').run([thread.id]);
             });
         });
     },

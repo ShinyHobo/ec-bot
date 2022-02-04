@@ -4,7 +4,11 @@ import * as https from 'https';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
 import * as _ from 'lodash';
+import * as fs from 'fs';
+import * as path from 'path';
 module.exports = {
+    deliverablesGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8'),
+    teamsGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8'),
     name: '!roadmap',
     description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
     usage: 'Usage: `!roadmap [pull/compare]`',
@@ -45,6 +49,10 @@ module.exports = {
         ShipsAndVehicles: 6,
         WeaponsAndItems: 7
     }),
+    QueryTypeEnum: Object.freeze({
+        Deliverables: 1,
+        Teams: 2
+    }),
     ProjectEnum: Object.freeze({
         SQ42: "el2codyca4mnx",
         SC: "ekm24a6ywr3o3"
@@ -60,61 +68,75 @@ module.exports = {
     async lookup(argv: Array<string>, msg: Message, db: Database) {
         msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
-        let data = [];
+        let deliverables = [];
         let offset = 0;
         const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
-        const initialResponse = await this.getResponse(this.query(offset, sortBy)); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
-        let queries = [];
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        let deliverablePromises = [];
 
         do {
-            queries.push(this.getResponse(this.query(offset, sortBy)));
+            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
-        Promise.all(queries).then((responses)=>{
+        Promise.all(deliverablePromises).then((responses)=>{
+            let teamPromises = [];
             responses.forEach((response)=>{
                 let metaData = response.metaData;
-                data = data.concat(metaData);
+                deliverables = deliverables.concat(metaData);
             });
+
             // only show tasks that complete in the future
             if('n' in argv) {
                 const now = Date.now();
-                data = data.filter(d => new Date(d.endDate).getTime() > now);
+                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
             }
             
             // only show tasks that have expired or been completed
             if('o' in argv) {
                 const now = Date.now();
-                data = data.filter(d => new Date(d.endDate).getTime() <= now);
+                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
             }
             
             // sort by soonest expiring
             if('e' in argv) {
-                data.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-            }
-            
-            let delta = Date.now() - start;
-            console.log(`Deliverables: ${data.length} in ${delta} microseconds`);
-            const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
-            const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
-            const newRoadmap = JSON.stringify(data, null, 2)
-
-            let insert = !existingRoadmap;
-            
-            if(existingRoadmap) {
-                insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
             }
 
-            if(insert) {
-                db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
-                msg.channel.send(`Roadmap retrieval returned ${data.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                this.compare([], msg, db);
-            } else {
-                msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-            }
+            deliverables.forEach((d) => {
+                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams));
+            });
+
+            Promise.all(teamPromises).then((responses) => {
+                responses.forEach((response, index)=>{
+                    // order is preserved, team index matches deliverable index
+                    let metaData = response.metaData;
+                    deliverables[index].teams = metaData;
+                });
+                
+                let delta = Date.now() - start;
+                console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
+                const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
+                const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
+                const newRoadmap = JSON.stringify(deliverables, null, 2)
+
+                let insert = !existingRoadmap;
+                
+                if(existingRoadmap) {
+                    insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                }
+
+                if(insert) {
+                    db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
+                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                    this.compare([], msg, db);
+                } else {
+                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                }
+            });
         });
     },
-    async getResponse(data) {
+    async getResponse(data, type) {
         return await new Promise((resolve, reject) => {
             const req = https.request(this.options, (res) => {
               let data = '';
@@ -123,7 +145,17 @@ module.exports = {
                 data += d;
               });
               res.on('end', () => {
-                resolve(JSON.parse(data).data.progressTracker.deliverables)
+                switch(type){
+                    case 1: // Deliverables
+                        resolve(JSON.parse(data).data.progressTracker.deliverables);
+                        break;
+                    case 2: // Teams 
+                        resolve(JSON.parse(data).data.progressTracker.teams);
+                        break;
+                    default:
+                        reject(`Invalid response query type ${type}`);
+                        break;
+                }
               });
             });
     
@@ -135,15 +167,15 @@ module.exports = {
             req.end();
         });
     },
-    query(offset=0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+    deliverablesQuery(offset: number =0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
         let query: any = {
             operationName: "deliverables",
-            query: "query deliverables($startDate: String!, $endDate: String!, $search: String, $deliverableSlug: String, $teamSlug: String, $projectSlugs: [String], $categoryIds: [Int], $sortBy: SortMethod, $offset: Int, $limit: Int) {\n  progressTracker {\n    deliverables(\n      startDate: $startDate\n      endDate: $endDate\n      search: $search\n      deliverableSlug: $deliverableSlug\n      teamSlug: $teamSlug\n      projectSlugs: $projectSlugs\n      categoryIds: $categoryIds\n      sortBy: $sortBy\n      offset: $offset\n      limit: $limit\n    ) {\n      totalCount\n      metaData {\n        ...Deliverable\n        card {\n          ...Card\n          __typename\n        }\n        projects {\n          ...Project\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment Deliverable on Deliverable {\n  uuid\n  slug\n  title\n  description\n  startDate\n  endDate\n  numberOfDisciplines\n  numberOfTeams\n  updateDate\n  totalCount\n  __typename\n}\n\nfragment Card on Card {\n  id\n  title\n  description\n  category\n  release {\n    id\n    title\n    __typename\n  }\n  board {\n    id\n    title\n    __typename\n  }\n  updateDate\n  thumbnail\n  __typename\n}\n\nfragment Project on Project {\n  title\n  logo\n  __typename\n}\n",
+            query: this.deliverablesGraphql,
             variables: {
+                "startDate": "2020-01-01",
                 "endDate": "2023-12-31",
                 "limit": 20,
                 "offset": offset,
-                "startDate": "2020-01-01",
                 "sortBy": `${sortBy}`
             }
         };
@@ -156,6 +188,22 @@ module.exports = {
             query.categoryIds = JSON.stringify(categoryIds);
         }
         
+        return JSON.stringify(query);
+    },
+    teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
+        let query: any = {
+            operationName: "teams",
+            query: this.teamsGraphql,
+            variables: {
+                "startDate": "2020-01-01",
+                "endDate": "2050-12-31",
+                "limit": 20,
+                "offset": offset,
+                "sortBy": `${sortBy}`,
+                "deliverableSlug": deliverableSlug,
+            }
+        };
+
         return JSON.stringify(query);
     },
     compare(argv: Array<string>, msg: Message, db: Database) {
