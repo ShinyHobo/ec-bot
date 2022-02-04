@@ -103,6 +103,7 @@ module.exports = {
                 deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
             }
 
+            // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
                 teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams));
             });
@@ -235,7 +236,7 @@ module.exports = {
             newDeliverables.forEach(d => {
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`\* **${d.title}**\n`.toString()));
+                messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
             });
