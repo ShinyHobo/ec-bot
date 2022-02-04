@@ -71,11 +71,11 @@ module.exports = {
         let deliverables = [];
         let offset = 0;
         const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
-        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1, sortBy), this.QueryTypeEnum.Deliverables); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, sortBy), this.QueryTypeEnum.Deliverables));
+            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20, sortBy), this.QueryTypeEnum.Deliverables));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -168,14 +168,14 @@ module.exports = {
             req.end();
         });
     },
-    deliverablesQuery(offset: number =0, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+    deliverablesQuery(offset: number =0, limit: number=20, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
         let query: any = {
             operationName: "deliverables",
             query: this.deliverablesGraphql,
             variables: {
                 "startDate": "2020-01-01",
                 "endDate": "2023-12-31",
-                "limit": 20,
+                "limit": limit,
                 "offset": offset,
                 "sortBy": `${sortBy}`
             }
