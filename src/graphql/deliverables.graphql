@@ -68,5 +68,6 @@ fragment Card on Card {
 fragment Project on Project {
   title
   #logo
+  #slug
   #__typename
 }

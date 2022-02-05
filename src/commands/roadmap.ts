@@ -221,16 +221,24 @@ module.exports = {
         let messages = [];
         
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
+        let removedTeams = [];
+        let removedTimeAllocations = [];
+        let removedCards = [];
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
             removedDeliverables.forEach(d => {
-                messages.push(he.unescape(`\* ${d.title}\n`.toString()))
+                messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+
+                // todo - removed teams, time allocations, and cards
             });
             messages.push('===================================================================================================\n\n');
         }
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
+        let reamainingTeams = [];
+        let reamainingTimeAllocations = [];
+        let reamainingCards = [];
         if(newDeliverables.length) {
             messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
             newDeliverables.forEach(d => {
@@ -239,6 +247,21 @@ module.exports = {
                 messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+
+                // todo - new teams, etc
+                // check for diffs in each list
+                if(d.card) {
+                    let card = {
+
+                    };
+                    //reamainingCards.push(card);
+                }
+
+                if(d.teams) {
+                    d.teams.forEach((t)=>{
+                        //t.timeAllocations
+                    });
+                }
             });
             messages.push('===================================================================================================\n\n');
         }
@@ -269,6 +292,8 @@ module.exports = {
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
                     }
+
+                    // todo - updated teams, etc
                 }
             });
             messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
@@ -284,9 +309,10 @@ module.exports = {
             let insertPromises = [];
 
             console.log("Storing delta");
-            insertPromises.push(this.insertChanges(db, then, removedDeliverables, true));
-            insertPromises.push(this.insertChanges(db, then, newDeliverables));
-            insertPromises.push(this.insertChanges(db, then, updatedDeliverables));
+            // todo merge all insert changes into synchronous promise
+            //insertPromises.push(this.insertChanges(db, then, removedDeliverables, true)); // remove time allotments, etc
+            //insertPromises.push(this.insertChanges(db, then, newDeliverables)); // send new teams
+            //insertPromises.push(this.insertChanges(db, then, updatedDeliverables)); // send updated teams
 
             Promise.all(insertPromises).then(()=>{
                 console.log(`Database updated with delta in ${Date.now() - then} ms`);
