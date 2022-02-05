@@ -108,7 +108,7 @@ module.exports = {
                 teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams));
             });
 
-            Promise.all(teamPromises).then((responses) => {
+            Promise.all(teamPromises).then(async (responses) => {
                 responses.forEach((response, index)=>{
                     // order is preserved, team index matches deliverable index
                     let metaData = response.metaData;
@@ -127,10 +127,10 @@ module.exports = {
                     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
                 }
 
-                if(insert) {
+                if(insert||true) {
                     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
                     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                    this.compare([], msg, db);
+                    await this.compare([], msg, db, true);
                 } else {
                     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
                 }
@@ -207,7 +207,7 @@ module.exports = {
 
         return JSON.stringify(query);
     },
-    compare(argv: Array<string>, msg: Message, db: Database) {
+    async compare(argv: Array<string>, msg: Message, db: Database, insertChanges: boolean = false) {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
@@ -243,11 +243,11 @@ module.exports = {
             messages.push('===================================================================================================\n\n');
         }
 
-        const updatedDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
-        if(updatedDeliverables.length) {
+        const remainingDeliverables = first.filter(f => last.some(l => l.uuid === f.uuid || l.title === f.title));
+        let updatedDeliverables = [];
+        if(remainingDeliverables.length) {
             let updatedMessages = [];
-            let updateCount = 0;
-            updatedDeliverables.forEach(f => {
+            remainingDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
                 const d = diff.getDiff(f, l);
                 if(d.length) {
@@ -267,22 +267,48 @@ module.exports = {
                             update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
                         updatedMessages.push(he.unescape(update + '\n'));
-                        updateCount++;
+                        updatedDeliverables.push(f);
                     }
                 }
             });
-            messages.push(`[${updateCount}] deliverable(s) *updated*:\n`);
+            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
             messages = messages.concat(updatedMessages);
-            messages.push(`[${updatedDeliverables.length - updateCount}] deliverable(s) *unchanged*`);
+            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*`);
         }
 
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]}).catch(console.error);
+        await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]}).catch(console.error);
 
-        // Util.splitMessage(messages.join(''), {maxLength: 2000, char: '\n'}).forEach(message => {
-        //     msg.channel.send(message);
-        // });
+        // update database
+        if(insertChanges){
+            let then = Date.now();
+            let insertPromises = [];
+
+            console.log("Storing delta");
+            insertPromises.push(this.insertChanges(db, then, removedDeliverables, true));
+            insertPromises.push(this.insertChanges(db, then, newDeliverables));
+            insertPromises.push(this.insertChanges(db, then, updatedDeliverables));
+
+            Promise.all(insertPromises).then(()=>{
+                console.log(`Database updated with delta in ${Date.now() - then} ms`);
+            });
+        }
     },
-    shortenText(text) {
+    shortenText(text) { // shortens text to 100 characters per line for discord display
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
+    },
+    async insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
+        deliverables.forEach((d)=>{
+            // card_diff
+            let card_id = [];
+            // team_diff
+            let team_ids = [];
+            // timeAllocation_diff
+            let timeAllocation_ids = [];
+
+            let query = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                .run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, null, null, null,
+                    removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
+            // d.project_ids
+        });
     }
 };
