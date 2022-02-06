@@ -308,9 +308,18 @@ module.exports = {
             new Promise((resolve, reject) => {
                 let then = Date.now();
                 console.log("Storing delta");
-                this.insertChanges(db, then, removedDeliverables, true);
-                this.insertChanges(db, then, newDeliverables);
-                this.insertChanges(db, then, updatedDeliverables);
+                let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
+                if(!deliverableDeltas.count) {
+                    // initialize starting values
+                    // TODO get all cards, teams, and time allocations
+                    this.insertChanges(db, then, last);
+                } else {
+                    // only insert updates
+                    this.insertChanges(db, then, removedDeliverables, true);
+                    this.insertChanges(db, then, newDeliverables);
+                    this.insertChanges(db, then, updatedDeliverables);
+                }
+                
                 resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
             });
         }
@@ -337,7 +346,7 @@ module.exports = {
                     removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
 
                 let rowId = row.lastInsertRowid;
-                
+
                 // d.project_ids
             });
         });
