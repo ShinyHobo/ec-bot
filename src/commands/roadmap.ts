@@ -305,36 +305,43 @@ module.exports = {
 
         // update database
         if(insertChanges){
-            let then = Date.now();
-            let insertPromises = [];
-
-            console.log("Storing delta");
-            // todo merge all insert changes into synchronous promise
-            //insertPromises.push(this.insertChanges(db, then, removedDeliverables, true)); // remove time allotments, etc
-            //insertPromises.push(this.insertChanges(db, then, newDeliverables)); // send new teams
-            //insertPromises.push(this.insertChanges(db, then, updatedDeliverables)); // send updated teams
-
-            Promise.all(insertPromises).then(()=>{
-                console.log(`Database updated with delta in ${Date.now() - then} ms`);
+            new Promise((resolve, reject) => {
+                let then = Date.now();
+                console.log("Storing delta");
+                this.insertChanges(db, then, removedDeliverables, true);
+                this.insertChanges(db, then, newDeliverables);
+                this.insertChanges(db, then, updatedDeliverables);
+                resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
             });
         }
     },
     shortenText(text) { // shortens text to 100 characters per line for discord display
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
-    async insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
-        deliverables.forEach((d)=>{
-            // card_diff
-            let card_id = [];
-            // team_diff
-            let team_ids = [];
-            // timeAllocation_diff
-            let timeAllocation_ids = [];
+    insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
+        const delivarableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        const cardInsert = "";
+        const teamsInsert = "";
+        const timeAllocationInsert = "";
 
-            let query = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-                .run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, null, null, null,
+        const insertMany = db.transaction((dList: [any]) => {
+            dList.forEach((d) => {
+                // card_diff
+                let card_id = [];
+                // team_diff
+                let team_ids = [];
+                // timeAllocation_diff
+                let timeAllocation_ids = [];
+
+                let row = delivarableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, null, null, null,
                     removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
-            // d.project_ids
+
+                let rowId = row.lastInsertRowid;
+                
+                // d.project_ids
+            });
         });
+
+        insertMany(deliverables);
     }
 };
