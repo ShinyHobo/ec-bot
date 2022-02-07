@@ -239,10 +239,11 @@ module.exports = {
 
         let messages = [];
         
-        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
+        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
             removedDeliverables.forEach(d => {
+                // mark previous timespan
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
