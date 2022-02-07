@@ -379,6 +379,7 @@ module.exports = {
 
         const dbDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL").all();
+        // most recently removed -> AND addedDate IN (SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1)
         let dbTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
 
