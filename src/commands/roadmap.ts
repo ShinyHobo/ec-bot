@@ -223,6 +223,18 @@ module.exports = {
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
 
+        first.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+        });
+
+        last.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+        });
+
         const compareTime = Date.now();
 
         let messages = [];
@@ -352,9 +364,7 @@ module.exports = {
                     this.insertChanges(db, then - 1, first);
                 }
                 
-                this.insertChanges(db, then, removedDeliverables, true);
-                this.insertChanges(db, then, newDeliverables);
-                this.insertChanges(db, then, updatedDeliverables);
+                this.insertChanges(db, then, last);
                 
                 resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
             });
@@ -363,7 +373,7 @@ module.exports = {
     shortenText(text) { // shortens text to 100 characters per line for discord display
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
-    insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
+    insertChanges(db: Database, now: number, deliverables: [any]) {
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
@@ -398,10 +408,9 @@ module.exports = {
 
                     let projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    let row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
-                        removed?null:d.startDate, removed?null:d.endDate, removed?null:d.updateDate]);
+                    let row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null, d.startDate, d.endDate, d.updateDate]);
 
-                    // card_id, project_ids, team_ids, timeAllocation_ids
+                    // card_id, team_ids, timeAllocation_ids
 
                     let rowId = row.lastInsertRowid;
                 }
