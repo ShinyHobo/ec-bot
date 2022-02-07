@@ -245,8 +245,6 @@ module.exports = {
             removedDeliverables.forEach(d => {
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
-                d.startDate = null;
-                d.endDate = null;
                 // removed deliverable implies associated time allocations were removed; no description necessary
             });
             messages.push('===================================================================================================\n\n');
@@ -379,8 +377,11 @@ module.exports = {
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
 
-        const dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
-        const dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug ORDER BY addedDate DESC").all();
+        const dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff WHERE startDate IS NOT NULL AND endDate IS NOT NULL GROUP BY uuid").all();
+        const dbRemovedDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff WHERE startDate IS NULL AND endDate IS NULL GROUP BY uuid").all();
+        const dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug").all();
+
+        const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || l.title === f.title) && !dbRemovedDeliverables.some(l => l.uuid === f.uuid || l.title === f.title));
 
         const insertMany = db.transaction((dList: [any]) => {
             let dTeams = _.uniqBy(dList.flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
@@ -392,6 +393,10 @@ module.exports = {
                     //let row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
                     //let rowId = row.lastInsertRowid;
                 }
+            });
+
+            removedDeliverables.forEach((r) => {
+                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null, null, r.updateDate]);
             });
 
             dList.forEach((d) => {
