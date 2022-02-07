@@ -131,6 +131,7 @@ module.exports = {
                     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
                 }
 
+                // TODO remove true
                 if(insert||true) {
                     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
                     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
@@ -366,10 +367,23 @@ module.exports = {
     insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
-        const teamsInsert = "";
-        const timeAllocationInsert = "";
+        const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
+        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
+
+        const teams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug ORDER BY addedDate DESC").all();
 
         const insertMany = db.transaction((dList: [any]) => {
+            let dTeams = _.uniqBy(dList.flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
+
+            dTeams.forEach((dt) => {
+                const match = teams.find(t => t.slug === dt.slug);
+                const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
+                if(gd.length || !match) { // new or changed
+                    let row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                    let rowId = row.lastInsertRowid;
+                }
+            });
+
             dList.forEach((d) => {
                 // card_diff
                 let card_id = [];

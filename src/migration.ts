@@ -30,9 +30,9 @@ export default abstract class Migration {
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS team_diff("+
                 "id INTEGER NOT NULL UNIQUE,"+
+                "abbreviation TEXT,"+
                 "title TEXT,"+
                 "description TEXT,"+
-                "uuid TEXT,"+
                 "startDate INTEGER,"+
                 "endDate INTEGER,"+
                 "addedDate INTEGER,"+
