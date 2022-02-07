@@ -387,7 +387,29 @@ module.exports = {
         const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))) &&
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
 
-        const insertMany = db.transaction((dList: [any]) => {
+        const insertTeams = (teams: any[], justIds: boolean = true): any[] => {
+            let rTeams = [];
+            if(teams) {
+                teams.forEach((dt) => {
+                    const match = dbTeams.find(t => t.slug === dt.slug);
+                    const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
+                    if(gd.length || !match) { // new or changed
+                        const row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                        const rowId = row.lastInsertRowid;
+                        if(justIds) {
+                            rTeams.push(rowId);
+                        } else {
+                            rTeams.push({id: rowId, ...dt});
+                        }
+                        
+                        // TODO - check for time allocation differences
+                    }
+                });
+            }
+            return rTeams;
+        }
+
+        const insertDeliverables = db.transaction((dList: [any]) => {
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -397,17 +419,7 @@ module.exports = {
                     teamsInsert.run([rt.abbreviation, rt.title, rt.description, null, null, now, rt.numberOfDeliverables, rt.slug]);
                 });
             } else { // initialize team_diff
-                dbTeams = [];
-                dTeams.forEach((dt) => { // TODO - reduce code reuse [teams]
-                    const match = dbTeams.find(t => t.slug === dt.slug);
-                    const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
-                    if(gd.length || !match) { // new or changed
-                        let row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
-                        let rowId = row.lastInsertRowid;
-                        dbTeams.push({id: rowId, ...dt});
-                        // TODO - check for time allocation differences
-                    }
-                });
+                dbTeams = insertTeams(dTeams, false);
             }
 
             removedDeliverables.forEach((r) => {
@@ -423,6 +435,8 @@ module.exports = {
                 let timeAllocation_ids = [];
 
                 const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
+
+                let teamsNewlyInitialized = false;
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
                 if((dMatch && dMatch.team_ids === '') || (!dMatch && d.teams)) { // initialize team ids
                     d.teams.forEach((dt) => {
@@ -431,35 +445,25 @@ module.exports = {
                             team_ids.push(match.id);
                         }
                     });
+                    teamsNewlyInitialized = true;
                 }
 
                 if(gd.length || !dMatch || dMatch.team_ids === '') {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
-                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate')) { // changes to teams or time allocations
-                        if(d.teams) { // TODO - reduce code reuse [teams]
-                            d.teams.forEach((dt) => {
-                                const match = dbTeams.find(t => t.slug === dt.slug);
-                                const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
-                                if(gd.length || !match) { // new or changed
-                                    const row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
-                                    const rowId = row.lastInsertRowid;
-                                    team_ids.push(rowId);
-                                    // TODO - check for time allocation differences
-                                }
-                            });
-                        }
+                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') && !teamsNewlyInitialized) { // changes to teams or time allocations
+                        team_ids = insertTeams(d.teams);
                     }
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, team_ids.sort().toString(), null, d.startDate, d.endDate, d.updateDate]);
+                    deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, team_ids.sort((a,b)=>a-b).toString(), null, d.startDate, d.endDate, d.updateDate]);
 
-                    // card_id, team_ids, timeAllocation_ids
+                    // card_id, timeAllocation_ids
                 }
                 
             });
         });
 
-        insertMany(deliverables);
+        insertDeliverables(deliverables);
     }
 };
