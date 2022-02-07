@@ -31,6 +31,10 @@ module.exports = {
             case 'compare':
                 this.compare([], msg, db);
                 break;
+            case 'teams':
+                // TODO display current work being done based on team start/end dates from timeAllocations_diff table
+                console.log("!roadmap teams not implemented yet");
+                break;
             default:
                 msg.channel.send(this.usage).catch(console.error);
                 break;
@@ -329,7 +333,7 @@ module.exports = {
     },
     insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
         const delivarableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        const cardInsert = "";
+        const cardsInsert = "";
         const teamsInsert = "";
         const timeAllocationInsert = "";
 
@@ -342,12 +346,14 @@ module.exports = {
                 // timeAllocation_diff
                 let timeAllocation_ids = [];
 
-                let row = delivarableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, null, null, null,
+                let projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
+
+                let row = delivarableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
                     removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
 
-                let rowId = row.lastInsertRowid;
+                // card_id, project_ids, team_ids, timeAllocation_ids
 
-                // d.project_ids
+                let rowId = row.lastInsertRowid;
             });
         });
 
