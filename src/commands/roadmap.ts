@@ -222,27 +222,26 @@ module.exports = {
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
 
+        const compareTime = Date.now();
+
         let messages = [];
         
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || l.title === f.title));
-        let removedTeams = [];
-        let removedTimeAllocations = [];
-        let removedCards = [];
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
             removedDeliverables.forEach(d => {
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
 
-                // todo - removed teams, time allocations, and cards
+                // removed deliverable implies associated time allocations were removed; no description necessary
             });
             messages.push('===================================================================================================\n\n');
         }
 
-        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || l.title === f.title));
-        let reamainingTeams = [];
-        let reamainingTimeAllocations = [];
-        let reamainingCards = [];
+        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
+        let changedTeams = [];
+        let changedTimeAllocations = [];
+        let changedCards = [];
         if(newDeliverables.length) {
             messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
             newDeliverables.forEach(d => {
@@ -258,6 +257,7 @@ module.exports = {
                     let card = {
 
                     };
+                    let sner = card;
                     //reamainingCards.push(card);
                 }
 
@@ -275,18 +275,50 @@ module.exports = {
         if(remainingDeliverables.length) {
             let updatedMessages = [];
             remainingDeliverables.forEach(f => {
-                const l = last.find(x => x.uuid === f.uuid || x.title === f.uuid);
+                const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
                 const d = diff.getDiff(f, l);
-                if(d.length) {
-                    const changes = d.map(x => ({change: x.path && x.path[0], val: x.val}));
-                    if(changes.some(p => p.change === 'endDate' || p.change === 'title' || p.change === 'description')) {
+                if(d.length && l) {
+                    const changes = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    
+                    if(changes.some(p => p.op === 'update' && (p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description'))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                         let update = `\* **${title}**\n`;
-                        if(changes.some(p => p.change === 'endDate')) {
-                            const oldDate = new Date(f.endDate).toDateString();
-                            const newDate = new Date(l.endDate).toDateString();
-                            update += `End date has shifted from ${oldDate} to ${newDate}\n`;
+                        
+                        if(changes.some(p => p.change === 'startDate')) {
+                            const oldDate = new Date(f.startDate);
+                            const oldDateText = oldDate.toDateString();
+                            const newDate = new Date(l.startDate);
+                            const newDateText = newDate.toDateString();
+                            
+                            let updateText = "";
+                            if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
+                                updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
+                            } else if(newDate < oldDate) {
+                                updateText = "moved closer";
+                            } else if(oldDate < newDate) {
+                                updateText = "pushed back";
+                            }
+
+                            update += `Start date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
                         }
+                        if(changes.some(p => p.change === 'endDate')) {
+                            const oldDate = new Date(f.endDate);
+                            const oldDateText = oldDate.toDateString();
+                            const newDate = new Date(l.endDate);
+                            const newDateText = newDate.toDateString();
+                            
+                            let updateText = "";
+                            if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
+                                updateText = "moved earlier (time allocation removal(s) likely)\n"; // likely team time allocation was removed, but could have finished early
+                            } else if(oldDate < newDate) {
+                                updateText = "been extended";
+                            } else if(newDate < oldDate) {
+                                updateText = "moved closer";
+                            }
+
+                            update += `End date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
+                        }
+
                         if(changes.some(p => p.change === 'title')) {
                             update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
                         }
@@ -332,8 +364,8 @@ module.exports = {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
     insertChanges(db: Database, now: number, deliverables: [any], removed: boolean = false) {
-        const delivarableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-        const cardsInsert = "";
+        const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = "";
         const timeAllocationInsert = "";
 
@@ -348,7 +380,7 @@ module.exports = {
 
                 let projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                let row = delivarableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
+                let row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
                     removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
 
                 // card_id, project_ids, team_ids, timeAllocation_ids
