@@ -403,6 +403,8 @@ module.exports = {
                         }
                         
                         // TODO - check for time allocation differences
+                    } else {
+                        rTeams.push(match.id);
                     }
                 });
             }
@@ -413,7 +415,6 @@ module.exports = {
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
-                // const removedTeams = dbTeams.filter(f => d.teams && !d.teams.some(l => l.slug === f.slug) && !dbRemovedTeams.some(l => l.slug === f.slug));
                 const removedTeams = dbTeams.filter(f => !dTeams.some(l => l.slug === f.slug) && !dbRemovedTeams.some(l => l.slug === f.slug))
                 removedTeams.forEach((rt) => {
                     teamsInsert.run([rt.abbreviation, rt.title, rt.description, null, null, now, rt.numberOfDeliverables, rt.slug]);
@@ -435,23 +436,12 @@ module.exports = {
                 let timeAllocation_ids = [];
 
                 const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
-
-                let teamsNewlyInitialized = false;
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
-                if((dMatch && dMatch.team_ids === '') || (!dMatch && d.teams)) { // initialize team ids
-                    d.teams.forEach((dt) => {
-                        const match = dbTeams.find(t => t.slug === dt.slug);
-                        if(match) {
-                            team_ids.push(match.id);
-                        }
-                    });
-                    teamsNewlyInitialized = true;
-                }
 
                 if(gd.length || !dMatch || dMatch.team_ids === '') {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
-                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') && !teamsNewlyInitialized) { // changes to teams or time allocations
-                        team_ids = insertTeams(d.teams);
+                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (dMatch && dMatch.team_ids === '') || (!dMatch && d.teams)) {
+                        team_ids = insertTeams(d.teams); // changes to teams or time allocations
                     }
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
