@@ -69,6 +69,76 @@ module.exports = {
           'Content-Type': 'application/json'
         },
     },
+    async getResponse(data, type) {
+        return await new Promise((resolve, reject) => {
+            const req = https.request(this.options, (res) => {
+              let data = '';
+    
+              res.on('data', (d) => {
+                data += d;
+              });
+              res.on('end', () => {
+                switch(type){
+                    case 1: // Deliverables
+                        resolve(JSON.parse(data).data.progressTracker.deliverables);
+                        break;
+                    case 2: // Teams 
+                        resolve(JSON.parse(data).data.progressTracker.teams);
+                        break;
+                    default:
+                        reject(`Invalid response query type ${type}`);
+                        break;
+                }
+              });
+            });
+    
+            req.on('error', (error) => {
+              reject(error);
+            });
+    
+            req.write(data);
+            req.end();
+        });
+    },
+    deliverablesQuery(offset: number =0, limit: number=20, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+        let query: any = {
+            operationName: "deliverables",
+            query: this.deliverablesGraphql,
+            variables: {
+                "startDate": "2020-01-01",
+                "endDate": "2023-12-31",
+                "limit": limit,
+                "offset": offset,
+                "sortBy": `${sortBy}`
+            }
+        };
+        
+        if(projectSlugs.length) {
+            query.projectSlugs = JSON.stringify(projectSlugs);
+        }
+        
+        if(categoryIds.length) {
+            query.categoryIds = JSON.stringify(categoryIds);
+        }
+        
+        return JSON.stringify(query);
+    },
+    teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
+        let query: any = {
+            operationName: "teams",
+            query: this.teamsGraphql,
+            variables: {
+                "startDate": "2020-01-01",
+                "endDate": "2050-12-31",
+                "limit": 20,
+                "offset": offset,
+                "sortBy": `${sortBy}`,
+                "deliverableSlug": deliverableSlug,
+            }
+        };
+
+        return JSON.stringify(query);
+    },
     async lookup(argv: Array<string>, msg: Message, db: Database) {
         msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
@@ -142,76 +212,6 @@ module.exports = {
             });
         });
     },
-    async getResponse(data, type) {
-        return await new Promise((resolve, reject) => {
-            const req = https.request(this.options, (res) => {
-              let data = '';
-    
-              res.on('data', (d) => {
-                data += d;
-              });
-              res.on('end', () => {
-                switch(type){
-                    case 1: // Deliverables
-                        resolve(JSON.parse(data).data.progressTracker.deliverables);
-                        break;
-                    case 2: // Teams 
-                        resolve(JSON.parse(data).data.progressTracker.teams);
-                        break;
-                    default:
-                        reject(`Invalid response query type ${type}`);
-                        break;
-                }
-              });
-            });
-    
-            req.on('error', (error) => {
-              reject(error);
-            });
-    
-            req.write(data);
-            req.end();
-        });
-    },
-    deliverablesQuery(offset: number =0, limit: number=20, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
-        let query: any = {
-            operationName: "deliverables",
-            query: this.deliverablesGraphql,
-            variables: {
-                "startDate": "2020-01-01",
-                "endDate": "2023-12-31",
-                "limit": limit,
-                "offset": offset,
-                "sortBy": `${sortBy}`
-            }
-        };
-        
-        if(projectSlugs.length) {
-            query.projectSlugs = JSON.stringify(projectSlugs);
-        }
-        
-        if(categoryIds.length) {
-            query.categoryIds = JSON.stringify(categoryIds);
-        }
-        
-        return JSON.stringify(query);
-    },
-    teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
-        let query: any = {
-            operationName: "teams",
-            query: this.teamsGraphql,
-            variables: {
-                "startDate": "2020-01-01",
-                "endDate": "2050-12-31",
-                "limit": 20,
-                "offset": offset,
-                "sortBy": `${sortBy}`,
-                "deliverableSlug": deliverableSlug,
-            }
-        };
-
-        return JSON.stringify(query);
-    },
     async compare(argv: Array<string>, msg: Message, db: Database, insertChanges: boolean = false) {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
@@ -252,9 +252,6 @@ module.exports = {
         }
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
-        let changedTeams = [];
-        let changedTimeAllocations = [];
-        let changedCards = [];
         if(newDeliverables.length) {
             messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
             newDeliverables.forEach(d => {
@@ -373,9 +370,10 @@ module.exports = {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
     insertChanges(db: Database, now: number, deliverables: [any]) {
-        const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, team_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
+        const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
 
         const dbDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
@@ -383,6 +381,8 @@ module.exports = {
         // most recently removed -> AND addedDate IN (SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1)
         let dbTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
+
+        // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 
         const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))) &&
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
@@ -424,14 +424,12 @@ module.exports = {
             }
 
             removedDeliverables.forEach((r) => {
-                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null, null, r.updateDate]);
+                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null, r.updateDate]);
             });
 
             dList.forEach((d) => {
                 // card_diff
                 let card_id = [];
-                // team_diff
-                let team_ids = [];
                 // timeAllocation_diff
                 let timeAllocation_ids = [];
 
@@ -440,13 +438,17 @@ module.exports = {
 
                 if(gd.length || !dMatch || dMatch.team_ids === '') {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
+                    let team_ids = [];
                     if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (dMatch && dMatch.team_ids === '') || (!dMatch && d.teams)) {
                         team_ids = insertTeams(d.teams); // changes to teams or time allocations
                     }
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, team_ids.sort((a,b)=>a-b).toString(), null, d.startDate, d.endDate, d.updateDate]);
+                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, d.startDate, d.endDate, d.updateDate]);
+                    team_ids.forEach((tid) => {
+                        deliverableTeamsInsert.run([row.lastInsertRowid, tid]);
+                    });
 
                     // card_id, timeAllocation_ids
                 }

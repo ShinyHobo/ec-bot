@@ -25,7 +25,6 @@ export default abstract class Migration {
                 "totalCount INTEGER,"+
                 "card_id INTEGER,"+
                 "project_ids TEXT,"+
-                "team_ids TEXT,"+
                 "timeAllocation_ids	TEXT,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS team_diff("+
@@ -39,6 +38,10 @@ export default abstract class Migration {
                 "numberOfDeliverables INTEGER,"+
                 "slug INTEGER,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
+            db.prepare("CREATE TABLE deliverable_teams ("+
+                "deliverable_id INTEGER,"+
+                "team_id INTEGER,"+
+                "PRIMARY KEY(deliverable_id,team_id))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS timeAllocation_diff("+
                 "id INTEGER NOT NULL UNIQUE,"+
                 "startDate INTEGER,"+
