@@ -233,7 +233,8 @@ module.exports = {
             removedDeliverables.forEach(d => {
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
-
+                d.startDate = null;
+                d.endDate = null;
                 // removed deliverable implies associated time allocations were removed; no description necessary
             });
             messages.push('===================================================================================================\n\n');
@@ -343,19 +344,17 @@ module.exports = {
         // update database
         if(insertChanges){
             new Promise((resolve, reject) => {
-                let then = Date.now();
-                console.log("Storing delta");
+                const then = Date.now();
                 let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
                 if(!deliverableDeltas.count) {
                     // initialize starting values
                     // TODO get all cards, teams, and time allocations
-                    this.insertChanges(db, then, last);
-                } else {
-                    // only insert updates
-                    this.insertChanges(db, then, removedDeliverables, true);
-                    this.insertChanges(db, then, newDeliverables);
-                    this.insertChanges(db, then, updatedDeliverables);
+                    this.insertChanges(db, then - 1, first);
                 }
+                
+                this.insertChanges(db, then, removedDeliverables, true);
+                this.insertChanges(db, then, newDeliverables);
+                this.insertChanges(db, then, updatedDeliverables);
                 
                 resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
             });
@@ -370,36 +369,43 @@ module.exports = {
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
 
-        const teams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug ORDER BY addedDate DESC").all();
+        const dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
+        const dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug ORDER BY addedDate DESC").all();
 
         const insertMany = db.transaction((dList: [any]) => {
             let dTeams = _.uniqBy(dList.flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
 
             dTeams.forEach((dt) => {
-                const match = teams.find(t => t.slug === dt.slug);
+                const match = dbTeams.find(t => t.slug === dt.slug);
                 const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
                 if(gd.length || !match) { // new or changed
-                    let row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
-                    let rowId = row.lastInsertRowid;
+                    //let row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                    //let rowId = row.lastInsertRowid;
                 }
             });
 
             dList.forEach((d) => {
-                // card_diff
-                let card_id = [];
-                // team_diff
-                let team_ids = [];
-                // timeAllocation_diff
-                let timeAllocation_ids = [];
+                const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
+                const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
+                if(gd.length || !dMatch) {
+                    //if(removed && gd.)
+                    // card_diff
+                    let card_id = [];
+                    // team_diff
+                    let team_ids = [];
+                    // timeAllocation_diff
+                    let timeAllocation_ids = [];
 
-                let projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
+                    let projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                let row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
-                    removed?null:Date.parse(d.startDate), removed?null:Date.parse(d.endDate), removed?null:Date.parse(d.updateDate)]);
+                    let row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, null,
+                        removed?null:d.startDate, removed?null:d.endDate, removed?null:d.updateDate]);
 
-                // card_id, project_ids, team_ids, timeAllocation_ids
+                    // card_id, project_ids, team_ids, timeAllocation_ids
 
-                let rowId = row.lastInsertRowid;
+                    let rowId = row.lastInsertRowid;
+                }
+                
             });
         });
 

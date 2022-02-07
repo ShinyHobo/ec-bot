@@ -16,9 +16,9 @@ export default abstract class Migration {
                 "slug TEXT,"+
                 "title TEXT,"+
                 "description TEXT,"+
-                "startDate INTEGER,"+
-                "endDate INTEGER,"+
-                "updateDate	INTEGER,"+
+                "startDate TEXT,"+
+                "endDate TEXT,"+
+                "updateDate	TEXT,"+
                 "addedDate INTEGER,"+
                 "numberOfDisciplines INTEGER,"+
                 "numberOfTeams INTEGER,"+
@@ -33,16 +33,16 @@ export default abstract class Migration {
                 "abbreviation TEXT,"+
                 "title TEXT,"+
                 "description TEXT,"+
-                "startDate INTEGER,"+
-                "endDate INTEGER,"+
+                "startDate TEXT,"+
+                "endDate TEXT,"+
                 "addedDate INTEGER,"+
                 "numberOfDeliverables INTEGER,"+
                 "slug INTEGER,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS timeAllocation_diff("+
                 "id INTEGER NOT NULL UNIQUE,"+
-                "startDate INTEGER,"+
-                "endDate INTEGER,"+
+                "startDate TEXT,"+
+                "endDate TEXT,"+
                 "addedDate INTEGER,"+
                 "uuid TEXT,"+
                 "partialTime INTEGER,"+
@@ -56,7 +56,7 @@ export default abstract class Migration {
                 "category INTEGER,"+
                 "release_id INTEGER,"+
                 "release_title TEXT,"+
-                "updateDate INTEGER,"+
+                "updateDate TEXT,"+
                 "addedDate INTEGER,"+
                 "thumbnail TEXT,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
