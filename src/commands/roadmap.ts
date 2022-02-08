@@ -394,8 +394,6 @@ module.exports = {
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
                     }
-
-                    // todo - updated teams, etc
                 }
             });
             messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);

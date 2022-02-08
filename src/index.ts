@@ -7,7 +7,7 @@ import Migration from './migration';
 dotenv.config();
 
 // Set up database
-const db = new Database('ecdb.db');
+const db = new Database('delta.db');
 
 // Run db migrations
 Migration.run(db);
