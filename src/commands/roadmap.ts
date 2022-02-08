@@ -65,7 +65,7 @@ module.exports = {
         hostname: 'robertsspaceindustries.com',
         path: '/graphql',
         method: 'POST',
-        timeout: 7000,
+        timeout: 10000,
         headers: {
           'Content-Type': 'application/json'
         },
@@ -150,15 +150,21 @@ module.exports = {
         let deliverables = [];
         let offset = 0;
         const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
-        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1, sortBy), this.QueryTypeEnum.Deliverables); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        let completedQuery = true;
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1, sortBy), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20, sortBy), this.QueryTypeEnum.Deliverables));
+            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20, sortBy), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
         Promise.all(deliverablePromises).then((responses)=>{
+            if(!completedQuery) {
+                msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
+                return;
+            }
+
             let teamPromises = [];
             responses.forEach((response)=>{
                 let metaData = response.metaData;
@@ -468,8 +474,16 @@ module.exports = {
                 dbTimeAllocations = inserts.timeAllocations;
             }
 
-            const dCards = dList.filter((d) => d.card).flatMap((d) => d.card);
+            if(dbTimeAllocations.length) {
+                const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
+                const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
+                removedTimes.forEach((rt) => {
+                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id]);
+                });
+            }
+
             if(dbCards.length) {
+                const dCards = dList.filter((d) => d.card).flatMap((d) => d.card);
                 const removedCards = dbCards.filter(f => !dCards.some(l => l.tid === f.tid) && !dbRemovedCards.some(l => l.tid === f.tid));
                 removedCards.forEach((rc) => {
                     cardsInsert.run([rc.tid, rc.title, rc.description, rc.category, null, null, null, now, rc.thumbnail]);
