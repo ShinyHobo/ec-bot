@@ -25,7 +25,6 @@ export default abstract class Migration {
                 "totalCount INTEGER,"+
                 "card_id INTEGER,"+
                 "project_ids TEXT,"+
-                "timeAllocation_ids	TEXT,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS team_diff("+
                 "id INTEGER NOT NULL UNIQUE,"+

@@ -230,31 +230,31 @@ module.exports = {
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
 
-        // TODO - reduce code reuse
         // only required for new data; "first" data is pulled from the database
         // potentially use backup data files for db initialization
-        first.forEach((d)=>{
-            d.startDate = Date.parse(d.startDate);
-            d.endDate = Date.parse(d.endDate);
-            d.updateDate = Date.parse(d.updateDate);
-            if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
-                delete(d.card.id);
-            }
-        });
 
-        last.forEach((d)=>{
-            d.startDate = Date.parse(d.startDate);
-            d.endDate = Date.parse(d.endDate);
-            d.updateDate = Date.parse(d.updateDate);
-            if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
-                delete(d.card.id);
-            }
+        [first, last].forEach((data) => {
+            data.forEach((d)=>{
+                d.startDate = Date.parse(d.startDate);
+                d.endDate = Date.parse(d.endDate);
+                d.updateDate = Date.parse(d.updateDate);
+                if(d.card) {
+                    d.card.tid = d.card.id,
+                    d.card.release_id = d.card.release.id;
+                    d.card.release_title = d.card.release.title;
+                    delete(d.card.id);
+                }
+                if(d.teams) {
+                    d.teams.forEach((team) => {
+                        if(team.timeAllocations) {
+                            team.timeAllocations.forEach((ta) => {
+                                ta.startDate = Date.parse(ta.startDate);
+                                ta.endDate = Date.parse(ta.endDate);
+                            });
+                        }
+                    });
+                }
+            });
         });
 
         const compareTime = Date.now();
@@ -392,11 +392,12 @@ module.exports = {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
     insertChanges(db: Database, now: number, deliverables: [any]) {
-        const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, timeAllocation_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
+        const deliverableTimeAllocationsInsert = db.prepare("INSERT INTO deliverable_timeAllocations (deliverable_id, timeAllocation_id) VALUES (?,?)");
 
         const dbDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL").all();
@@ -409,7 +410,7 @@ module.exports = {
         const dbCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NOT NULL AND release_id IS NOT NULL AND release_title IS NOT NULL").all();
         const dbRemovedCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NULL AND release_id IS NULL AND release_title IS NULL").all();
 
-        const dbTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL");
+        let dbTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL");
         const dbRemovedTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL");
         const dbDeliverableTimeAllocations = db.prepare(`SELECT * FROM timeAllocation_diff WHERE id IN (SELECT timeAllocation_id FROM deliverable_timeAllocations WHERE deliverable_id IN (${mostRecentDeliverableIds}))`);
 
@@ -418,28 +419,46 @@ module.exports = {
         const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))) &&
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
 
-        const insertTeams = (teams: any[], justIds: boolean = true): any[] => {
+        const insertTeamsAndTimeAllocations = (teams: any[], justIds: boolean = true): any => {
             let rTeams = [];
+            let rTimes = [];
             if(teams) {
                 teams.forEach((dt) => {
                     const match = dbTeams.find(t => t.slug === dt.slug);
-                    const gd = diff.getDiff(match, dt).filter((df) => df.op === 'update');
-                    if(gd.length || !match) { // new or changed
-                        const row = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
-                        const rowId = row.lastInsertRowid;
+                    const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
+                    let teamId = null;
+                    if(tDiff.length || !match) { // new or changed
+                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                        teamId = teamRow.lastInsertRowid;
                         if(justIds) {
-                            rTeams.push(rowId);
+                            rTeams.push(teamId);
                         } else {
-                            rTeams.push({id: rowId, ...dt});
+                            rTeams.push({id: teamId, ...dt});
                         }
-                        
-                        // TODO - check for time allocation differences
                     } else {
-                        rTeams.push(match.id);
+                        teamId = match.id;
+                        rTeams.push(teamId);
+                    }
+
+                    if(dt.timeAllocations) {
+                        dt.timeAllocations.forEach((ta) => {
+                            const taMatch = dbTimeAllocations.find(t => t.uuid === ta.uuid);
+                            const taDiff = diff.getDiff(taMatch, ta);
+                            if(taDiff.length || !taMatch) {
+                                const taRow = timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, teamId]);
+                                if(justIds) {
+                                    rTimes.push(taRow.lastInsertRowid);
+                                } else {
+                                    rTimes.push({id: taRow.lastInsertRowid, ...ta});
+                                }
+                            } else {
+                                rTimes.push(taMatch.id);
+                            }
+                        });
                     }
                 });
             }
-            return rTeams;
+            return {teams: rTeams, timeAllocations: rTimes};
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
@@ -451,7 +470,9 @@ module.exports = {
                     teamsInsert.run([rt.abbreviation, rt.title, rt.description, null, null, now, rt.numberOfDeliverables, rt.slug]);
                 });
             } else { // initialize team_diff
-                dbTeams = insertTeams(dTeams, false);
+                const inserts = insertTeamsAndTimeAllocations(dTeams, false); // changes to teams or time allocations
+                dbTeams = inserts.teams;
+                dbTimeAllocations = inserts.timeAllocations;
             }
 
             const dCards = dList.filter((d) => d.card).flatMap((d) => d.card);
@@ -463,22 +484,22 @@ module.exports = {
             }
 
             removedDeliverables.forEach((r) => {
-                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null, r.updateDate]);
+                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, r.updateDate]);
             });
 
             dList.forEach((d) => {
-                // timeAllocation_diff
-                let timeAllocation_ids = [];
-
                 const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
 
                 if(gd.length || !dMatch || !dbDeliverableTeams.length) {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
                     let team_ids = [];
+                    let timeAllocation_ids = [];
                     let card_id = null;
                     if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (!dMatch && d.teams) || !dbDeliverableTeams.length) {
-                        team_ids = insertTeams(d.teams); // changes to teams or time allocations
+                        const inserts = insertTeamsAndTimeAllocations(d.teams); // changes to teams or time allocations
+                        team_ids = inserts.teams;
+                        timeAllocation_ids = inserts.timeAllocations;
                     }
 
                     if(d.card) {
@@ -494,12 +515,14 @@ module.exports = {
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, null, d.startDate, d.endDate, d.updateDate]);
+                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, d.startDate, d.endDate, d.updateDate]);
                     team_ids.forEach((tid) => {
                         deliverableTeamsInsert.run([row.lastInsertRowid, tid]);
                     });
 
-                    // timeAllocation_ids
+                    timeAllocation_ids.forEach((taid) => {
+                        deliverableTimeAllocationsInsert.run([row.lastInsertRowid, taid]);
+                    });
                 }
                 
             });
