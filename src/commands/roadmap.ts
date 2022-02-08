@@ -427,8 +427,7 @@ module.exports = {
         const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
 
-        const dbCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NOT NULL AND release_id IS NOT NULL AND release_title IS NOT NULL").all();
-        const dbRemovedCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NULL AND release_id IS NULL AND release_title IS NULL").all();
+        const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
 
         let dbTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL");
         const dbRemovedTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL");
@@ -500,6 +499,7 @@ module.exports = {
 
             if(dbCards.length) {
                 const dCards = dList.filter((d) => d.card).flatMap((d) => d.card);
+                const dbRemovedCards = dbCards.filter(f => f.updateDate === null && f.release_id === null && f.release_title === null);
                 const removedCards = dbCards.filter(f => !dCards.some(l => l.tid === f.tid) && !dbRemovedCards.some(l => l.tid === f.tid));
                 removedCards.forEach((rc) => {
                     cardsInsert.run([rc.tid, rc.title, rc.description, rc.category, null, null, null, now, rc.thumbnail]);
