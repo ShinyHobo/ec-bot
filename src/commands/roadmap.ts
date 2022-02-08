@@ -202,30 +202,65 @@ module.exports = {
 
                 let delta = Date.now() - start;
                 console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
-                const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
-                const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
-                const newRoadmap = JSON.stringify(deliverables, null, 2)
+                msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
 
-                let insert = !existingRoadmap;
+                const compareTime = Date.now();
 
-                if(existingRoadmap) {
-                    insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                // TODO - Add db initializer that reads from backup data
+                let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
+                if(!deliverableDeltas.count) {
+                //     this.insertChanges(db, then - 1, first);
                 }
 
-                // TODO - Replace json storing and comparison with db update, then call compare using that data
+                this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
+                console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
-                // TODO remove true
-                if(insert||true) {
-                    db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
-                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                    await this.compare([], msg, db, true);
-                } else {
-                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-                }
+                // const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
+                // const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
+                // const newRoadmap = JSON.stringify(deliverables, null, 2)
+
+                // let insert = !existingRoadmap;
+
+                // if(existingRoadmap) {
+                //     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                // }
+
+                // // TODO remove true
+                // if(insert||true) {
+                //     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
+                //     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                //     await this.compare([], msg, db, true);
+                // } else {
+                //     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                // }
             });
         });
     },
-    async compare(argv: Array<string>, msg: Message, db: Database, insertChanges: boolean = false) {
+    adjustDeliverables(deliverables: [any]): any[] { // adjust the deliverable object for db insertion
+        deliverables.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+                delete(d.card.id);
+            }
+            if(d.teams) {
+                d.teams.forEach((team) => {
+                    if(team.timeAllocations) {
+                        team.timeAllocations.forEach((ta) => {
+                            ta.startDate = Date.parse(ta.startDate);
+                            ta.endDate = Date.parse(ta.endDate);
+                        });
+                    }
+                });
+            }
+        });
+        return deliverables;
+    },
+    async compare(argv: Array<string>, msg: Message, db: Database) {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
@@ -233,34 +268,11 @@ module.exports = {
             msg.channel.send('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
             return;
         }
+
+        const lastUpdate = db.prepare("SELECT MAX(addedDate) as date FROM deliverable_diff").get();
+
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
-
-        // only required for new data; "first" data is pulled from the database
-        // potentially use backup data files for db initialization
-        [first, last].forEach((data) => {
-            data.forEach((d)=>{
-                d.startDate = Date.parse(d.startDate);
-                d.endDate = Date.parse(d.endDate);
-                d.updateDate = Date.parse(d.updateDate);
-                if(d.card) {
-                    d.card.tid = d.card.id,
-                    d.card.release_id = d.card.release.id;
-                    d.card.release_title = d.card.release.title;
-                    delete(d.card.id);
-                }
-                if(d.teams) {
-                    d.teams.forEach((team) => {
-                        if(team.timeAllocations) {
-                            team.timeAllocations.forEach((ta) => {
-                                ta.startDate = Date.parse(ta.startDate);
-                                ta.endDate = Date.parse(ta.endDate);
-                            });
-                        }
-                    });
-                }
-            });
-        });
 
         const compareTime = Date.now();
 
@@ -375,23 +387,6 @@ module.exports = {
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]}).catch(console.error);
-
-        // update database
-        if(insertChanges){
-            new Promise((resolve, reject) => {
-                const then = Date.now();
-                let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
-                if(!deliverableDeltas.count) {
-                    // initialize starting values
-                    // TODO get all cards, teams, and time allocations
-                    this.insertChanges(db, then - 1, first);
-                }
-
-                this.insertChanges(db, then, last);
-
-                resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
-            });
-        }
     },
     shortenText(text) { // shortens text to 100 characters per line for discord display
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
