@@ -6,15 +6,55 @@ import * as he from 'he';
 import * as _ from 'lodash';
 import * as fs from 'fs';
 import * as path from 'path';
-module.exports = {
-    deliverablesGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8'),
-    teamsGraphql: fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8'),
-    name: '!roadmap',
-    description: 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.',
-    usage: 'Usage: `!roadmap [pull/compare]`',
-    execute(msg: Message, args: Array<string>, db: Database) {
+
+export abstract class Roadmap {
+    public static readonly command = '!roadmap';
+    public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
+    public static readonly usage = 'Usage: `!roadmap [pull/compare]`';
+
+    private static readonly deliverablesGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8');
+    private static readonly teamsGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8');
+    private static readonly SortByEnum = Object.freeze({
+        ALPHABETICAL: "ALPHABETICAL",
+        CHRONOLOGICAL: "CHRONOLOGICAL"
+    });
+    private static readonly CategoryEnum = Object.freeze({
+        CoreTech: 1,
+        Gameplay: 2,
+        Characters: 3,
+        Locations: 4,
+        AI: 5,
+        ShipsAndVehicles: 6,
+        WeaponsAndItems: 7
+    });
+    private static readonly QueryTypeEnum = Object.freeze({
+        Deliverables: 1,
+        Teams: 2
+    });
+    private static readonly ProjectEnum = Object.freeze({
+        SQ42: "el2codyca4mnx",
+        SC: "ekm24a6ywr3o3"
+    });
+    private static readonly options = {
+        hostname: 'robertsspaceindustries.com',
+        path: '/graphql',
+        method: 'POST',
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+    };
+
+    /**
+     * 
+     * @param msg 
+     * @param args 
+     * @param db 
+     * @returns 
+     */
+    public static execute(msg: Message, args: Array<string>, db: Database) {
         if(args.length !== 1) {
-            msg.channel.send(this.usage).catch(console.error);
+            msg.channel.send(Roadmap.usage).catch(console.error);
             return;
         }
 
@@ -26,53 +66,30 @@ module.exports = {
 
         switch(args[0]) {
             case 'pull':
-                this.lookup([], msg, db);
+                Roadmap.lookup([], msg, db);
                 break;
             case 'compare':
-                this.compare([], msg, db);
+                Roadmap.compare([], msg, db);
                 break;
             case 'teams':
                 // TODO display current work being done based on team start/end dates from timeAllocations_diff table
                 console.log("!roadmap teams not implemented yet");
                 break;
             default:
-                msg.channel.send(this.usage).catch(console.error);
+                msg.channel.send(Roadmap.usage).catch(console.error);
                 break;
         }
-    },
-    SortByEnum: Object.freeze({
-        ALPHABETICAL: "ALPHABETICAL",
-        CHRONOLOGICAL: "CHRONOLOGICAL"
-    }),
-    CategoryEnum: Object.freeze({
-        CoreTech: 1,
-        Gameplay: 2,
-        Characters: 3,
-        Locations: 4,
-        AI: 5,
-        ShipsAndVehicles: 6,
-        WeaponsAndItems: 7
-    }),
-    QueryTypeEnum: Object.freeze({
-        Deliverables: 1,
-        Teams: 2
-    }),
-    ProjectEnum: Object.freeze({
-        SQ42: "el2codyca4mnx",
-        SC: "ekm24a6ywr3o3"
-    }),
-    options: {
-        hostname: 'robertsspaceindustries.com',
-        path: '/graphql',
-        method: 'POST',
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-    },
-    async getResponse(data, type) {
+    }
+
+    /**
+     * 
+     * @param data 
+     * @param type 
+     * @returns 
+     */
+    private static async getResponse(data, type): Promise<any> {
         return await new Promise((resolve, reject) => {
-            const req = https.request(this.options, (res) => {
+            const req = https.request(Roadmap.options, (res) => {
               let data = '';
 
               res.on('data', (d) => {
@@ -109,11 +126,21 @@ module.exports = {
             req.write(data);
             req.end();
         });
-    },
-    deliverablesQuery(offset: number =0, limit: number=20, sortBy=this.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+    }
+
+    /**
+     * 
+     * @param offset 
+     * @param limit 
+     * @param sortBy 
+     * @param projectSlugs 
+     * @param categoryIds 
+     * @returns 
+     */
+    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy=Roadmap.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
         let query: any = {
             operationName: "deliverables",
-            query: this.deliverablesGraphql,
+            query: Roadmap.deliverablesGraphql,
             variables: {
                 "startDate": "2020-01-01",
                 "endDate": "2023-12-31",
@@ -132,11 +159,19 @@ module.exports = {
         }
 
         return JSON.stringify(query);
-    },
-    teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
+    }
+
+    /**
+     * 
+     * @param offset 
+     * @param deliverableSlug 
+     * @param sortBy 
+     * @returns 
+     */
+    private static teamsQuery(offset: number =0, deliverableSlug: String, sortBy=Roadmap.SortByEnum.ALPHABETICAL) {
         let query: any = {
             operationName: "teams",
-            query: this.teamsGraphql,
+            query: Roadmap.teamsGraphql,
             variables: {
                 "startDate": "2020-01-01",
                 "endDate": "2050-12-31",
@@ -148,19 +183,28 @@ module.exports = {
         };
 
         return JSON.stringify(query);
-    },
-    async lookup(argv: Array<string>, msg: Message, db: Database) {
+    }
+
+    /**
+     * 
+     * @param argv 
+     * @param msg 
+     * @param db 
+     */
+    private static async lookup(argv: Array<string>, msg: Message, db: Database) {
         msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
         let deliverables = [];
         let offset = 0;
-        const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
+        const sortBy = 'd' in argv ? Roadmap.SortByEnum.CHRONOLOGICAL : Roadmap.SortByEnum.ALPHABETICAL;
         let completedQuery = true;
-        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1, sortBy), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
+        const initialResponse = await Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 1, sortBy), Roadmap.QueryTypeEnum.Deliverables).catch((e) => {
+            completedQuery = false;
+        }); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20, sortBy), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 20, sortBy), Roadmap.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -194,7 +238,7 @@ module.exports = {
 
             // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
-                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams).catch(() => completedQuery = false));
+                teamPromises.push(Roadmap.getResponse(Roadmap.teamsQuery(offset, d.slug), Roadmap.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
@@ -224,11 +268,11 @@ module.exports = {
                         const day = +file.substring(6, 8);
                         const date = new Date(year, month - 1, day).getTime();
                         const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        this.insertChanges(db, date, this.adjustDeliverables(data));
+                        Roadmap.insertChanges(db, date, Roadmap.adjustData(data));
                     });
                 }
 
-                this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
+                Roadmap.insertChanges(db, compareTime, Roadmap.adjustData(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                 // const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
@@ -245,14 +289,20 @@ module.exports = {
                 // if(insert||true) {
                 //     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
                 //     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                //     await this.compare([], msg, db, true);
+                //     await Roadmap.compare([], msg, db, true);
                 // } else {
                 //     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
                 // }
             }).catch(console.error);
         }).catch(console.error);
-    },
-    adjustDeliverables(deliverables: [any]): any[] { // adjust the deliverable object for db insertion
+    }
+
+    /**
+     * 
+     * @param deliverables 
+     * @returns 
+     */
+    private static adjustData(deliverables: any[]): any[] { // adjust the deliverable object for db insertion
         deliverables.forEach((d)=>{
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
@@ -276,8 +326,16 @@ module.exports = {
             }
         });
         return deliverables;
-    },
-    async compare(argv: Array<string>, msg: Message, db: Database) {
+    }
+
+    /**
+     * 
+     * @param argv 
+     * @param msg 
+     * @param db 
+     * @returns 
+     */
+    private static async compare(argv: Array<string>, msg: Message, db: Database) {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
@@ -301,7 +359,7 @@ module.exports = {
             removedDeliverables.forEach(d => {
                 // mark previous timespan
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
-                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(Roadmap.shortenText(`${d.description}\n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
             });
             messages.push('===================================================================================================\n\n');
@@ -315,7 +373,7 @@ module.exports = {
                 const end = new Date(d.endDate).toDateString();
                 messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
-                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(Roadmap.shortenText(`${d.description}\n`)));
 
                 // todo - new teams, etc
                 // check for diffs in each list
@@ -386,10 +444,10 @@ module.exports = {
                         }
 
                         if(changes.some(p => p.change === 'title')) {
-                            update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
+                            update += Roadmap.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
                         }
                         if(changes.some(p => p.change === 'description')) {
-                            update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
+                            update += Roadmap.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
@@ -402,11 +460,24 @@ module.exports = {
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${results[0].date}.md`)]}).catch(console.error);
-    },
-    shortenText(text) { // shortens text to 100 characters per line for discord display
+    }
+
+    /**
+     * Shortens text to 100 characters per line for discord display
+     * @param text The text to shorten
+     * @returns The shortened text
+     */ 
+    private static shortenText(text): string {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
-    },
-    insertChanges(db: Database, now: number, deliverables: [any]) { // generate delta entries for each deliverable
+    }
+
+    /** 
+     * Generate delta entries for each deliverable 
+     * @param db The database connection 
+     * @param now The time to use for addedTime entries
+     * @param deliverables The deliverable entries to add
+     */
+    private static insertChanges(db: Database, now: number, deliverables: any[]) {
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
@@ -563,4 +634,4 @@ module.exports = {
 
         insertDeliverables(deliverables);
     }
-};
+}

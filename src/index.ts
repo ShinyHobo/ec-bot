@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import Database from 'better-sqlite3';
 import { Client, Intents, Collection, ThreadChannel, Message } from 'discord.js';
-import * as botCommands from './commands/index.js';
+import * as botCommands from './commands/index';
 import Migration from './migration';
 
 dotenv.config();
@@ -25,7 +25,7 @@ const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.
 let commands = new Collection();
 
 Object.keys(botCommands).map(key => {
-  commands.set(botCommands[key].name, botCommands[key]);
+  commands.set(botCommands[key][key].command, botCommands[key][key]);
 });
 
 bot.login(process.env.TOKEN);
@@ -34,7 +34,7 @@ bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
   // Unarchive archived threads
-  botCommands.Renew.unarchiveAll(bot, db);
+  //botCommands.Renew.unarchiveAll(bot, db);
 });
 
 // Watch the message history for commands
@@ -59,5 +59,5 @@ bot.on('messageCreate', (msg: Message) => {
 });
 
 bot.on('threadUpdate', (oldThread: ThreadChannel, newThread: ThreadChannel) => {
-  botCommands.Renew.unarchive(newThread, db);
+  //botCommands.Renew.unarchive(newThread, db);
 });
