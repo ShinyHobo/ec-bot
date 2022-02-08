@@ -419,21 +419,16 @@ module.exports = {
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id) VALUES (?,?,?,?,?,?,?)");
 
-        const dbDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
-        const dbRemovedDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL").all();
-        // most recently removed -> AND addedDate IN (SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1)
-        let dbTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
-        const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
+        const dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid").all();
+        let dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug").all();
         const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
-
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
-
-        let dbTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL");
-        const dbRemovedTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL");
+        let dbTimeAllocations = db.prepare("SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid");
  
         // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 
+        const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
         const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))) &&
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
 
@@ -479,6 +474,7 @@ module.exports = {
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
+                const dbRemovedTeams = dbTeams.filter(t => t.startDate === null && t.endDate === null);
                 const removedTeams = dbTeams.filter(f => !dTeams.some(l => l.slug === f.slug) && !dbRemovedTeams.some(l => l.slug === f.slug))
                 removedTeams.forEach((rt) => {
                     teamsInsert.run([rt.abbreviation, rt.title, rt.description, null, null, now, rt.numberOfDeliverables, rt.slug]);
@@ -490,6 +486,7 @@ module.exports = {
             }
 
             if(dbTimeAllocations.length) {
+                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
                 const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
                 const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
                 removedTimes.forEach((rt) => {
