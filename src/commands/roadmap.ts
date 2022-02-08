@@ -223,16 +223,27 @@ module.exports = {
         const first = JSON.parse(results[1].json);
         const last = JSON.parse(results[0].json);
 
+        // TODO - reduce code reuse
         first.forEach((d)=>{
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
             d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+            }
         });
 
         last.forEach((d)=>{
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
             d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+            }
         });
 
         const compareTime = Date.now();
@@ -381,6 +392,9 @@ module.exports = {
         // most recently removed -> AND addedDate IN (SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1)
         let dbTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
+        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${dbDeliverables.map((dd) => dd.id).toString()}))`).all();
+        const dbCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NOT NULL").all();
+        const dbRemovedCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NULL").all();
 
         // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 
@@ -428,29 +442,36 @@ module.exports = {
             });
 
             dList.forEach((d) => {
-                // card_diff
-                let card_id = [];
                 // timeAllocation_diff
                 let timeAllocation_ids = [];
 
                 const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
 
-                if(gd.length || !dMatch || dMatch.team_ids === '') {
+                if(gd.length || !dMatch || !dbDeliverableTeams.length) {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
                     let team_ids = [];
-                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (dMatch && dMatch.team_ids === '') || (!dMatch && d.teams)) {
+                    let card_id = null;
+                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (!dMatch && d.teams) || !dbDeliverableTeams.length) {
                         team_ids = insertTeams(d.teams); // changes to teams or time allocations
+                    }
+
+                    if((!dMatch && d.card)) {
+                        const cMatch = dbCards.find((dc) => dc.id === d.card.id);
+                        const cgd = diff.getDiff(cMatch, d.card).filter((df) => df.op === 'update');
+                        if(!cMatch || cgd.length) {
+                            cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
+                        }
                     }
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, null, projectIds, null, d.startDate, d.endDate, d.updateDate]);
+                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, null, d.startDate, d.endDate, d.updateDate]);
                     team_ids.forEach((tid) => {
                         deliverableTeamsInsert.run([row.lastInsertRowid, tid]);
                     });
 
-                    // card_id, timeAllocation_ids
+                    // timeAllocation_ids
                 }
                 
             });
