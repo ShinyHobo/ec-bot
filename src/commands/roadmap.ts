@@ -280,8 +280,9 @@ export abstract class Roadmap {
 
                 const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
+                const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
                 msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                    `\n\`${changes.removed} removals\`, \`${changes.added} additions\`, and \`${changes.updated} modifications\`.\n`+
+                    `\n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.\n`+
                     ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
 
             }).catch(console.error);
@@ -578,7 +579,7 @@ export abstract class Roadmap {
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
-            let changes = {added: 0, removed: 0, updated: 0};
+            let changes = {added: 0, removed: 0, updated: 0, readded: 0, c: []};
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -613,7 +614,7 @@ export abstract class Roadmap {
 
             removedDeliverables.forEach((r) => {
                 deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null]);
-                changes.removed += 1;
+                changes.removed++;
             });
 
             let addedCards = []; // some deliverables share the same release view card (ie. 'Bombs' and 'MOAB')
@@ -655,10 +656,13 @@ export abstract class Roadmap {
                     if(!dMatch || (dMatch && gd.length)) {
                         const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, d.startDate, d.endDate, d.updateDate]);
                         did = row.lastInsertRowid;
-                        if(dMatch) {
-                            changes.updated += 1;
+                        if(dMatch && dMatch.startDate && dMatch.endDate) {
+                            changes.updated++;
                         } else {
-                            changes.added += 1;
+                            changes.added++;
+                            if (dMatch) {
+                                changes.readded++;
+                            }
                         }
                     } else {
                         did = dMatch.id;
