@@ -34,7 +34,7 @@ bot.on('ready', () => {
   console.info(`Logged in as ${bot.user.tag}!`);
   bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
   // Unarchive archived threads
-  //botCommands.Renew.unarchiveAll(bot, db);
+  botCommands.Renew.Renew.unarchiveAll(bot, db);
 });
 
 // Watch the message history for commands
@@ -59,5 +59,5 @@ bot.on('messageCreate', (msg: Message) => {
 });
 
 bot.on('threadUpdate', (oldThread: ThreadChannel, newThread: ThreadChannel) => {
-  //botCommands.Renew.unarchive(newThread, db);
+  botCommands.Renew.Renew.unarchive(newThread, db);
 });
