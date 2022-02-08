@@ -232,6 +232,7 @@ module.exports = {
                 d.card.tid = d.card.id,
                 d.card.release_id = d.card.release.id;
                 d.card.release_title = d.card.release.title;
+                delete(d.card.id);
             }
         });
 
@@ -243,6 +244,7 @@ module.exports = {
                 d.card.tid = d.card.id,
                 d.card.release_id = d.card.release.id;
                 d.card.release_title = d.card.release.title;
+                delete(d.card.id);
             }
         });
 
@@ -456,12 +458,14 @@ module.exports = {
                         team_ids = insertTeams(d.teams); // changes to teams or time allocations
                     }
 
-                    if((!dMatch && d.card)) {
-                        const cMatch = dbCards.find((dc) => dc.id === d.card.id);
+                    if(d.card) {
+                        const cMatch = dbCards.find((dc) => dc.tid === d.card.tid);
                         const cgd = diff.getDiff(cMatch, d.card).filter((df) => df.op === 'update');
                         if(!cMatch || cgd.length) {
                             const row = cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
                             card_id = row.lastInsertRowid;
+                        } else {
+                            card_id = cMatch.id;
                         }
                     }
 
