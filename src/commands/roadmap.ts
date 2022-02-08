@@ -103,6 +103,7 @@ module.exports = {
 
             req.on('timeout', () => {
                 req.destroy();
+                reject('timed out');
             });
 
             req.write(data);
@@ -165,8 +166,7 @@ module.exports = {
 
         Promise.all(deliverablePromises).then((responses)=>{
             if(!completedQuery) {
-                msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
-                return;
+                return msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
             }
 
             let teamPromises = [];
@@ -194,10 +194,13 @@ module.exports = {
 
             // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
-                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams));
+                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
+                if(!completedQuery) {
+                    return msg.channel.send(`Roadmap team retrieval timed out; please try again later.`).catch(console.error);
+                }
                 responses.forEach((response, index)=>{
                     // order is preserved, team index matches deliverable index
                     let metaData = response.metaData;
@@ -215,20 +218,18 @@ module.exports = {
                 if(!deliverableDeltas.count) {
                     
                     const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
-                    fs.readdir(initializationDataDir, (err, files) => {
-                        files.forEach((file) => {
-                            const year = +file.substring(0, 4);
-                            const month = +file.substring(4, 6);
-                            const day = +file.substring(6, 8);
-                            const date = new Date(year, month - 1, day).getTime();
-                            const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                            this.insertChanges(db, date, data);
-                        });
+                    //const files = fs.readdirSync(initializationDataDir);
+                    //let file = files[files.length - 1];
+                    fs.readdirSync(initializationDataDir).forEach((file) => {
+                        const year = +file.substring(0, 4);
+                        const month = +file.substring(4, 6);
+                        const day = +file.substring(6, 8);
+                        const date = new Date(year, month - 1, day).getTime();
+                        const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
+                        this.insertChanges(db, date, this.adjustDeliverables(data));
                     });
                 }
-
-                // TODO - troubleshoot inserts to ensure accurate change logging
-                // TODO - replace card_diff updateDate time with epoch int
+                
                 // TODO - prevent duplicate cards if no changes have been detected
 
                 this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
@@ -252,8 +253,8 @@ module.exports = {
                 // } else {
                 //     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
                 // }
-            });
-        });
+            }).catch(console.error);
+        }).catch(console.error);
     },
     adjustDeliverables(deliverables: [any]): any[] { // adjust the deliverable object for db insertion
         deliverables.forEach((d)=>{
@@ -264,6 +265,7 @@ module.exports = {
                 d.card.tid = d.card.id,
                 d.card.release_id = d.card.release.id;
                 d.card.release_title = d.card.release.title;
+                d.card.updateDate = Date.parse(d.card.updateDate);
                 delete(d.card.id);
             }
             if(d.teams) {
