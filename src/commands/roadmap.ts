@@ -7,11 +7,14 @@ import * as _ from 'lodash';
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Bot commands for analyzing the RSI roadmap and progress tracker
+ */
 export abstract class Roadmap {
     /** The bot base command */
     public static readonly command = '!roadmap';
     
-    /** The function */
+    /** The functionality of the command */
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
     
     /** The bot command pattern */

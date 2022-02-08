@@ -1,14 +1,18 @@
 import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
+
+/**
+ * Bot command for testing bot functionality
+ */
 export abstract class Ping {
     /** The bot base command */
     public static readonly command = '!ping';
 
-    /** The description */
-    public static readonly description: 'Replies with pong';
+    /** The functionality of the command */
+    public static readonly description = 'Replies with pong';
 
     /** The bot command pattern */
-    public static readonly usage: 'Usage: `!ping`';
+    public static readonly usage = 'Usage: `!ping`';
 
     /**
      * Executes the bot commands

@@ -1,8 +1,6 @@
-//module.exports = {
-    //Verify: require('./verify'),
-    //Renew: require('./renew'),
-    //Help: require('./help')
-//};
+//Verify: require('./verify'),
+//Renew: require('./renew'),
 
 export * as Roadmap from "./roadmap";
 export * as Ping from "./ping";
+export * as Help from "./help";
