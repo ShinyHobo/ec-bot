@@ -413,7 +413,12 @@ module.exports = {
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
         const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id) VALUES (?,?,?,?,?,?,?)");
 
-        const dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid").all();
+        // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
+        let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
+        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();//.flatMap(d => d[0]);
+        const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
+        dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
+
         let dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug").all();
         const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
@@ -498,12 +503,12 @@ module.exports = {
             }
 
             removedDeliverables.forEach((r) => {
-                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, r.updateDate]);
+                deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null]);
             });
 
             let addedCards = []; // some deliverables share the same release view card (ie. 'Bombs' and 'MOAB')
             dList.forEach((d) => {
-                const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
+                const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
 
                 if(gd.length || !dMatch || !dbDeliverableTeams.length) {
