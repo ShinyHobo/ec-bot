@@ -74,7 +74,7 @@ export abstract class Roadmap {
      */
     public static execute(msg: Message, args: Array<string>, db: Database) {
         if(args.length !== 1) {
-            msg.channel.send(Roadmap.usage).catch(console.error);
+            msg.channel.send(this.usage).catch(console.error);
             return;
         }
 
@@ -86,17 +86,17 @@ export abstract class Roadmap {
 
         switch(args[0]) {
             case 'pull':
-                Roadmap.delta(msg, db);
+                this.delta(msg, db);
                 break;
             case 'compare':
-                Roadmap.compare([], msg, db);
+                this.compare([], msg, db);
                 break;
             case 'teams':
                 // TODO display current work being done based on team start/end dates from timeAllocations_diff table
                 console.log("!roadmap teams not implemented yet");
                 break;
             default:
-                msg.channel.send(Roadmap.usage).catch(console.error);
+                msg.channel.send(this.usage).catch(console.error);
                 break;
         }
     }
@@ -109,7 +109,7 @@ export abstract class Roadmap {
      */
     private static async getResponse(data: string, type: number): Promise<any> {
         return await new Promise((resolve, reject) => {
-            const req = https.request(Roadmap.options, (res) => {
+            const req = https.request(this.options, (res) => {
               let data = '';
 
               res.on('data', (d) => {
@@ -157,10 +157,10 @@ export abstract class Roadmap {
      * @param categoryIds The categories to limit the search to
      * @returns The query
      */
-    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy:string=Roadmap.SortByEnum.ALPHABETICAL, projectSlugs:any[]=[], categoryIds:any[]=[]): string {
+    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy:string=this.SortByEnum.ALPHABETICAL, projectSlugs:any[]=[], categoryIds:any[]=[]): string {
         let query: any = {
             operationName: "deliverables",
-            query: Roadmap.deliverablesGraphql,
+            query: this.deliverablesGraphql,
             variables: {
                 "startDate": "2020-01-01",
                 "endDate": "2023-12-31",
@@ -188,10 +188,10 @@ export abstract class Roadmap {
      * @param sortBy SortByEnum sort type
      * @returns The query
      */
-    private static teamsQuery(offset: number =0, deliverableSlug: string, sortBy=Roadmap.SortByEnum.ALPHABETICAL) {
+    private static teamsQuery(offset: number =0, deliverableSlug: string, sortBy=this.SortByEnum.ALPHABETICAL) {
         let query: any = {
             operationName: "teams",
-            query: Roadmap.teamsGraphql,
+            query: this.teamsGraphql,
             variables: {
                 "startDate": "2020-01-01",
                 "endDate": "2050-12-31",
@@ -215,15 +215,15 @@ export abstract class Roadmap {
         let start = Date.now();
         let deliverables = [];
         let offset = 0;
-        //const sortBy = 'd' in argv ? Roadmap.SortByEnum.CHRONOLOGICAL : Roadmap.SortByEnum.ALPHABETICAL;
+        //const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
         let completedQuery = true;
-        const initialResponse = await Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 1), Roadmap.QueryTypeEnum.Deliverables).catch((e) => {
+        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1), this.QueryTypeEnum.Deliverables).catch((e) => {
             completedQuery = false;
         }); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 20), Roadmap.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -257,7 +257,7 @@ export abstract class Roadmap {
 
             // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
-                teamPromises.push(Roadmap.getResponse(Roadmap.teamsQuery(offset, d.slug), Roadmap.QueryTypeEnum.Teams).catch(() => completedQuery = false));
+                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
@@ -287,11 +287,11 @@ export abstract class Roadmap {
                         const day = +file.substring(6, 8);
                         const date = new Date(year, month - 1, day).getTime();
                         const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        Roadmap.insertChanges(db, date, Roadmap.adjustData(data));
+                        this.insertChanges(db, date, this.adjustData(data));
                     });
                 }
 
-                Roadmap.insertChanges(db, compareTime, Roadmap.adjustData(deliverables));
+                this.insertChanges(db, compareTime, this.adjustData(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                 // const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
@@ -301,14 +301,14 @@ export abstract class Roadmap {
                 // let insert = !existingRoadmap;
 
                 // if(existingRoadmap) {
-                //     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
+                //     insert = !_.isEqual(existingthis.json, newRoadmap);
                 // }
 
                 // // TODO remove true
                 // if(insert||true) {
                 //     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
                 //     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                //     await Roadmap.compare([], msg, db, true);
+                //     await this.compare([], msg, db, true);
                 // } else {
                 //     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
                 // }
@@ -376,7 +376,7 @@ export abstract class Roadmap {
             removedDeliverables.forEach(d => {
                 // mark previous timespan
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
-                messages.push(he.unescape(Roadmap.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
             });
             messages.push('===================================================================================================\n\n');
@@ -390,7 +390,7 @@ export abstract class Roadmap {
                 const end = new Date(d.endDate).toDateString();
                 messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
-                messages.push(he.unescape(Roadmap.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
 
                 // todo - new teams, etc
                 // check for diffs in each list
@@ -461,10 +461,10 @@ export abstract class Roadmap {
                         }
 
                         if(changes.some(p => p.change === 'title')) {
-                            update += Roadmap.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
+                            update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
                         }
                         if(changes.some(p => p.change === 'description')) {
-                            update += Roadmap.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
+                            update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
