@@ -79,6 +79,10 @@ module.exports = {
                 data += d;
               });
               res.on('end', () => {
+                if(data[0] === '<') {
+                    console.log(data);
+                    reject('Server error');
+                }
                 switch(type){
                     case 1: // Deliverables
                         resolve(JSON.parse(data).data.progressTracker.deliverables);
@@ -206,11 +210,25 @@ module.exports = {
 
                 const compareTime = Date.now();
 
-                // TODO - Add db initializer that reads from backup data
+                // populate db with initial values
                 let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
                 if(!deliverableDeltas.count) {
-                //     this.insertChanges(db, then - 1, first);
+                    
+                    const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
+                    fs.readdir(initializationDataDir, (err, files) => {
+                        files.forEach((file) => {
+                            const year = +file.substring(0, 4);
+                            const month = +file.substring(4, 6);
+                            const day = +file.substring(6, 8);
+                            const date = new Date(year, month - 1, day).getTime();
+                            const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
+                            this.insertChanges(db, date, data);
+                        });
+                    });
                 }
+
+                // TODO - troubleshoot inserts to ensure accurate change logging
+                // TODO - replace card_diff updateDate time with epoch int
 
                 this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
