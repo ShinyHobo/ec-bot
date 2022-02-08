@@ -38,7 +38,7 @@ export default abstract class Migration {
                 "numberOfDeliverables INTEGER,"+
                 "slug INTEGER,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
-            db.prepare("CREATE TABLE deliverable_teams ("+
+            db.prepare("CREATE TABLE IF NOT EXISTS deliverable_teams ("+
                 "deliverable_id INTEGER,"+
                 "team_id INTEGER,"+
                 "PRIMARY KEY(deliverable_id,team_id))").run();
