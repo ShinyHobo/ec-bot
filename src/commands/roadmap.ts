@@ -218,8 +218,6 @@ module.exports = {
                 if(!deliverableDeltas.count) {
                     
                     const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
-                    //const files = fs.readdirSync(initializationDataDir);
-                    //let file = files[files.length - 1];
                     fs.readdirSync(initializationDataDir).forEach((file) => {
                         const year = +file.substring(0, 4);
                         const month = +file.substring(4, 6);
@@ -229,8 +227,6 @@ module.exports = {
                         this.insertChanges(db, date, this.adjustDeliverables(data));
                     });
                 }
-                
-                // TODO - prevent duplicate cards if no changes have been detected
 
                 this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
@@ -412,7 +408,7 @@ module.exports = {
     shortenText(text) { // shortens text to 100 characters per line for discord display
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
     },
-    insertChanges(db: Database, now: number, deliverables: [any]) {
+    insertChanges(db: Database, now: number, deliverables: [any]) { // generate delta entries for each deliverable
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
