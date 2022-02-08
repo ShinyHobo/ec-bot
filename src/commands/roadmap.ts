@@ -8,16 +8,28 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export abstract class Roadmap {
+    /** The bot base command */
     public static readonly command = '!roadmap';
+    
+    /** The description */
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
+    
+    /** The bot command pattern */
     public static readonly usage = 'Usage: `!roadmap [pull/compare]`';
 
+    /** Graphql query for retrieving the list of deliverables from the RSI progress tracker page */
     private static readonly deliverablesGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8');
+
+    /** Graphql query for retrieving the list of teams and time allocations from the RSI progress tracker page */
     private static readonly teamsGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8');
+
+    /** The available search pattens for the graphql queries */
     private static readonly SortByEnum = Object.freeze({
         ALPHABETICAL: "ALPHABETICAL",
         CHRONOLOGICAL: "CHRONOLOGICAL"
     });
+
+    /** The available category ids for the graphql queries */
     private static readonly CategoryEnum = Object.freeze({
         CoreTech: 1,
         Gameplay: 2,
@@ -27,14 +39,20 @@ export abstract class Roadmap {
         ShipsAndVehicles: 6,
         WeaponsAndItems: 7
     });
+
+    /** The available query types */
     private static readonly QueryTypeEnum = Object.freeze({
         Deliverables: 1,
         Teams: 2
     });
+
+    /** The available project types for the graphql queries */
     private static readonly ProjectEnum = Object.freeze({
         SQ42: "el2codyca4mnx",
         SC: "ekm24a6ywr3o3"
     });
+
+    /** The base query options for pulling down graphql results */
     private static readonly options = {
         hostname: 'robertsspaceindustries.com',
         path: '/graphql',
@@ -46,11 +64,10 @@ export abstract class Roadmap {
     };
 
     /**
-     * 
-     * @param msg 
-     * @param args 
-     * @param db 
-     * @returns 
+     * Executes the bot commands
+     * @param msg The msg that triggered the command
+     * @param args Available arguments included with the command
+     * @param db The database connection
      */
     public static execute(msg: Message, args: Array<string>, db: Database) {
         if(args.length !== 1) {
@@ -66,7 +83,7 @@ export abstract class Roadmap {
 
         switch(args[0]) {
             case 'pull':
-                Roadmap.lookup([], msg, db);
+                Roadmap.delta(msg, db);
                 break;
             case 'compare':
                 Roadmap.compare([], msg, db);
@@ -82,12 +99,12 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param data 
-     * @param type 
-     * @returns 
+     * Gets data from RSI
+     * @param data The graphql query
+     * @param type The grpahql query type
+     * @returns The response promise
      */
-    private static async getResponse(data, type): Promise<any> {
+    private static async getResponse(data: string, type: number): Promise<any> {
         return await new Promise((resolve, reject) => {
             const req = https.request(Roadmap.options, (res) => {
               let data = '';
@@ -129,15 +146,15 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param offset 
-     * @param limit 
-     * @param sortBy 
-     * @param projectSlugs 
-     * @param categoryIds 
-     * @returns 
+     * Generates a graphql query for retrieving deliverables data from RSI
+     * @param offset The offset
+     * @param limit The limit (max 20)
+     * @param sortBy SortByEnum sort type
+     * @param projectSlugs The projects to limit the search to
+     * @param categoryIds The categories to limit the search to
+     * @returns The query
      */
-    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy=Roadmap.SortByEnum.ALPHABETICAL, projectSlugs=[], categoryIds=[]) {
+    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy:string=Roadmap.SortByEnum.ALPHABETICAL, projectSlugs:any[]=[], categoryIds:any[]=[]): string {
         let query: any = {
             operationName: "deliverables",
             query: Roadmap.deliverablesGraphql,
@@ -162,13 +179,13 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param offset 
-     * @param deliverableSlug 
-     * @param sortBy 
-     * @returns 
+     * Generates a graphql query for retrieving deliverables data from RSI
+     * @param offset The offset
+     * @param deliverableSlug The deliverable slug to limit the search by
+     * @param sortBy SortByEnum sort type
+     * @returns The query
      */
-    private static teamsQuery(offset: number =0, deliverableSlug: String, sortBy=Roadmap.SortByEnum.ALPHABETICAL) {
+    private static teamsQuery(offset: number =0, deliverableSlug: string, sortBy=Roadmap.SortByEnum.ALPHABETICAL) {
         let query: any = {
             operationName: "teams",
             query: Roadmap.teamsGraphql,
@@ -186,25 +203,24 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param argv 
-     * @param msg 
-     * @param db 
+     * Looks up data from RSI and stores the delta
+     * @param msg The command message
+     * @param db The database connection
      */
-    private static async lookup(argv: Array<string>, msg: Message, db: Database) {
+    private static async delta(msg: Message, db: Database) {
         msg.channel.send('Retrieving roadmap state...').catch(console.error);
         let start = Date.now();
         let deliverables = [];
         let offset = 0;
-        const sortBy = 'd' in argv ? Roadmap.SortByEnum.CHRONOLOGICAL : Roadmap.SortByEnum.ALPHABETICAL;
+        //const sortBy = 'd' in argv ? Roadmap.SortByEnum.CHRONOLOGICAL : Roadmap.SortByEnum.ALPHABETICAL;
         let completedQuery = true;
-        const initialResponse = await Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 1, sortBy), Roadmap.QueryTypeEnum.Deliverables).catch((e) => {
+        const initialResponse = await Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 1), Roadmap.QueryTypeEnum.Deliverables).catch((e) => {
             completedQuery = false;
         }); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 20, sortBy), Roadmap.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(Roadmap.getResponse(Roadmap.deliverablesQuery(offset, 20), Roadmap.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -219,22 +235,22 @@ export abstract class Roadmap {
                 deliverables = deliverables.concat(metaData);
             });
 
-            // only show tasks that complete in the future
-            if('n' in argv) {
-                const now = Date.now();
-                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
-            }
+            // // only show tasks that complete in the future
+            // if('n' in argv) {
+            //     const now = Date.now();
+            //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
+            // }
 
-            // only show tasks that have expired or been completed
-            if('o' in argv) {
-                const now = Date.now();
-                deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
-            }
+            // // only show tasks that have expired or been completed
+            // if('o' in argv) {
+            //     const now = Date.now();
+            //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
+            // }
 
-            // sort by soonest expiring
-            if('e' in argv) {
-                deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-            }
+            // // sort by soonest expiring
+            // if('e' in argv) {
+            //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+            // }
 
             // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
@@ -298,9 +314,9 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param deliverables 
-     * @returns 
+     * Adjusts the data for delta storage
+     * @param deliverables The deliverables list to adjust
+     * @returns The adjusted data
      */
     private static adjustData(deliverables: any[]): any[] { // adjust the deliverable object for db insertion
         deliverables.forEach((d)=>{
@@ -329,19 +345,17 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param argv 
-     * @param msg 
-     * @param db 
-     * @returns 
+     * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
+     * @param argv The available arguments [TODO]
+     * @param msg The command message
+     * @param db The database connection
      */
     private static async compare(argv: Array<string>, msg: Message, db: Database) {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
         const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
         if(!results || results.length < 2) {
-            msg.channel.send('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
-            return;
+            return msg.channel.send('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
         }
 
         const lastUpdate = db.prepare("SELECT MAX(addedDate) as date FROM deliverable_diff").get();
