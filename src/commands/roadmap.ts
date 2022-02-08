@@ -65,6 +65,7 @@ module.exports = {
         hostname: 'robertsspaceindustries.com',
         path: '/graphql',
         method: 'POST',
+        timeout: 7000,
         headers: {
           'Content-Type': 'application/json'
         },
@@ -94,6 +95,10 @@ module.exports = {
     
             req.on('error', (error) => {
               reject(error);
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
             });
     
             req.write(data);
