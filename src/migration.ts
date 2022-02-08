@@ -61,12 +61,8 @@ export default abstract class Migration {
                 "uuid TEXT,"+
                 "partialTime INTEGER,"+
                 "team_id INTEGER,"+
-                "PRIMARY KEY(id AUTOINCREMENT))").run();
-            db.prepare("CREATE TABLE IF NOT EXISTS deliverable_timeAllocations("+
                 "deliverable_id INTEGER,"+
-                "timeAllocation_id INTEGER,"+
-                "PRIMARY KEY(deliverable_id,timeAllocation_id))").run();
-            
+                "PRIMARY KEY(id AUTOINCREMENT))").run();
         });
 
         migrate();

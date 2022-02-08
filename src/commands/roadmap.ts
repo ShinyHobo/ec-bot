@@ -74,7 +74,7 @@ module.exports = {
         return await new Promise((resolve, reject) => {
             const req = https.request(this.options, (res) => {
               let data = '';
-    
+
               res.on('data', (d) => {
                 data += d;
               });
@@ -83,7 +83,7 @@ module.exports = {
                     case 1: // Deliverables
                         resolve(JSON.parse(data).data.progressTracker.deliverables);
                         break;
-                    case 2: // Teams 
+                    case 2: // Teams
                         resolve(JSON.parse(data).data.progressTracker.teams);
                         break;
                     default:
@@ -92,7 +92,7 @@ module.exports = {
                 }
               });
             });
-    
+
             req.on('error', (error) => {
               reject(error);
             });
@@ -100,7 +100,7 @@ module.exports = {
             req.on('timeout', () => {
                 req.destroy();
             });
-    
+
             req.write(data);
             req.end();
         });
@@ -117,15 +117,15 @@ module.exports = {
                 "sortBy": `${sortBy}`
             }
         };
-        
+
         if(projectSlugs.length) {
             query.projectSlugs = JSON.stringify(projectSlugs);
         }
-        
+
         if(categoryIds.length) {
             query.categoryIds = JSON.stringify(categoryIds);
         }
-        
+
         return JSON.stringify(query);
     },
     teamsQuery(offset: number =0, deliverableSlug: String, sortBy=this.SortByEnum.ALPHABETICAL) {
@@ -170,13 +170,13 @@ module.exports = {
                 const now = Date.now();
                 deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
             }
-            
+
             // only show tasks that have expired or been completed
             if('o' in argv) {
                 const now = Date.now();
                 deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
             }
-            
+
             // sort by soonest expiring
             if('e' in argv) {
                 deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -193,7 +193,7 @@ module.exports = {
                     let metaData = response.metaData;
                     deliverables[index].teams = metaData;
                 });
-                
+
                 let delta = Date.now() - start;
                 console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
                 const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
@@ -201,7 +201,7 @@ module.exports = {
                 const newRoadmap = JSON.stringify(deliverables, null, 2)
 
                 let insert = !existingRoadmap;
-                
+
                 if(existingRoadmap) {
                     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
                 }
@@ -232,7 +232,6 @@ module.exports = {
 
         // only required for new data; "first" data is pulled from the database
         // potentially use backup data files for db initialization
-
         [first, last].forEach((data) => {
             data.forEach((d)=>{
                 d.startDate = Date.parse(d.startDate);
@@ -260,7 +259,7 @@ module.exports = {
         const compareTime = Date.now();
 
         let messages = [];
-        
+
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
@@ -311,17 +310,17 @@ module.exports = {
                 const d = diff.getDiff(f, l);
                 if(d.length && l) {
                     const changes = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    
+
                     if(changes.some(p => p.op === 'update' && (p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description'))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                         let update = `\* **${title}**\n`;
-                        
+
                         if(changes.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
                             const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.startDate);
                             const newDateText = newDate.toDateString();
-                            
+
                             let updateText = "";
                             if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
                                 updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
@@ -338,7 +337,7 @@ module.exports = {
                             const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.endDate);
                             const newDateText = newDate.toDateString();
-                            
+
                             let updateText = "";
                             if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
                                 updateText = "moved earlier (time allocation removal(s) likely)\n"; // likely team time allocation was removed, but could have finished early
@@ -381,9 +380,9 @@ module.exports = {
                     // TODO get all cards, teams, and time allocations
                     this.insertChanges(db, then - 1, first);
                 }
-                
+
                 this.insertChanges(db, then, last);
-                
+
                 resolve(console.log(`Database updated with delta in ${Date.now() - then} ms`));
             });
         }
@@ -396,8 +395,7 @@ module.exports = {
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
-        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id) VALUES (?,?,?,?,?,?)");
-        const deliverableTimeAllocationsInsert = db.prepare("INSERT INTO deliverable_timeAllocations (deliverable_id, timeAllocation_id) VALUES (?,?)");
+        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id) VALUES (?,?,?,?,?,?,?)");
 
         const dbDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedDeliverables = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL").all();
@@ -406,7 +404,7 @@ module.exports = {
         const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
         const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
-        
+
         const dbCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NOT NULL AND release_id IS NOT NULL AND release_title IS NOT NULL").all();
         const dbRemovedCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NULL AND release_id IS NULL AND release_title IS NULL").all();
 
@@ -440,19 +438,15 @@ module.exports = {
                         rTeams.push(teamId);
                     }
 
+                    // analyze changes to time allocations
                     if(dt.timeAllocations) {
                         dt.timeAllocations.forEach((ta) => {
                             const taMatch = dbTimeAllocations.find(t => t.uuid === ta.uuid);
                             const taDiff = diff.getDiff(taMatch, ta);
                             if(taDiff.length || !taMatch) {
-                                const taRow = timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, teamId]);
-                                if(justIds) {
-                                    rTimes.push(taRow.lastInsertRowid);
-                                } else {
-                                    rTimes.push({id: taRow.lastInsertRowid, ...ta});
-                                }
+                                rTimes.push({team_id: teamId, ...ta});
                             } else {
-                                rTimes.push(taMatch.id);
+                                rTimes.push({team_id: teamId, ...taMatch});
                             }
                         });
                     }
@@ -494,12 +488,12 @@ module.exports = {
                 if(gd.length || !dMatch || !dbDeliverableTeams.length) {
                     const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
                     let team_ids = [];
-                    let timeAllocation_ids = [];
+                    let timeAllocations = [];
                     let card_id = null;
                     if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (!dMatch && d.teams) || !dbDeliverableTeams.length) {
                         const inserts = insertTeamsAndTimeAllocations(d.teams); // changes to teams or time allocations
                         team_ids = inserts.teams;
-                        timeAllocation_ids = inserts.timeAllocations;
+                        timeAllocations = inserts.timeAllocations; // updated time allocations
                     }
 
                     if(d.card) {
@@ -527,11 +521,11 @@ module.exports = {
                         deliverableTeamsInsert.run([did, tid]);
                     });
 
-                    timeAllocation_ids.forEach((taid) => {
-                        deliverableTimeAllocationsInsert.run([did, taid]);
+                    timeAllocations.forEach((ta) => {
+                         timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did]);
                     });
                 }
-                
+
             });
         });
 
