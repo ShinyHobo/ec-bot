@@ -507,6 +507,7 @@ module.exports = {
                 deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, r.updateDate]);
             });
 
+            let addedCards = []; // some deliverables share the same release view card (ie. 'Bombs' and 'MOAB')
             dList.forEach((d) => {
                 const dMatch = dbDeliverables.find((dd) => dd.uuid === d.uuid);
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
@@ -526,8 +527,14 @@ module.exports = {
                         const cMatch = dbCards.find((dc) => dc.tid === d.card.tid);
                         const cgd = diff.getDiff(cMatch, d.card).filter((df) => df.op === 'update');
                         if(!cMatch || cgd.length) {
-                            const row = cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
-                            card_id = row.lastInsertRowid;
+                            const sharedCard = addedCards.find(c => c.tid === d.card.tid);
+                            if(sharedCard) {
+                                card_id = sharedCard.id;
+                            } else {
+                                const row = cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
+                                card_id = row.lastInsertRowid;
+                                addedCards.push({tid: d.card.tid, id: card_id});
+                            }
                         } else {
                             card_id = cMatch.id;
                         }
