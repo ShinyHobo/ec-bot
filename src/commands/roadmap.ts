@@ -260,7 +260,6 @@ export abstract class Roadmap {
 
                 let delta = Date.now() - start;
                 console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
-                msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
 
                 const compareTime = Date.now();
 
@@ -279,10 +278,11 @@ export abstract class Roadmap {
                     });
                 }
 
-                this.insertChanges(db, compareTime, this.adjustData(deliverables));
+                const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
-
-                // TODO - return general detected changes (added, removed, updated)
+                msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
+                    `\n\`${changes.removed} removals\`, \`${changes.added} additions\`, and \`${changes.updated} modifications\`.\n`+
+                    ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
 
             }).catch(console.error);
         }).catch(console.error);
@@ -347,7 +347,7 @@ export abstract class Roadmap {
         // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
 
-        
+
 
 
         // const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
@@ -512,8 +512,9 @@ export abstract class Roadmap {
      * @param db The database connection 
      * @param now The time to use for addedTime entries
      * @param deliverables The deliverable entries to add
+     * @returns The changes that were detected (addition, removal, modification)
      */
-    private static insertChanges(db: Database, now: number, deliverables: any[]) {
+    private static insertChanges(db: Database, now: number, deliverables: any[]): any {
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
@@ -577,6 +578,7 @@ export abstract class Roadmap {
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
+            let changes = {added: 0, removed: 0, updated: 0};
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -611,6 +613,7 @@ export abstract class Roadmap {
 
             removedDeliverables.forEach((r) => {
                 deliverableInsert.run([r.uuid, r.slug, r.title, r.description, now, null, null, r.totalCount, null, null, null, null, null]);
+                changes.removed += 1;
             });
 
             let addedCards = []; // some deliverables share the same release view card (ie. 'Bombs' and 'MOAB')
@@ -619,11 +622,11 @@ export abstract class Roadmap {
                 const gd = diff.getDiff(dMatch, d).filter((df) => df.op === 'update');
 
                 if(gd.length || !dMatch || !dbDeliverableTeams.length) {
-                    const changes = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
+                    const dChanges = gd.map(x => ({change: x.path && x.path[0], val: x.val}));
                     let team_ids = [];
                     let timeAllocations = [];
                     let card_id = null;
-                    if(gd.length && changes.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (!dMatch && d.teams) || !dbDeliverableTeams.length) {
+                    if(gd.length && dChanges.some((c) => c.change === 'numberOfTeams' || c.change === 'startDate' || c.change === 'endDate') || (!dMatch && d.teams) || !dbDeliverableTeams.length) {
                         const inserts = insertTeamsAndTimeAllocations(d.teams); // changes to teams or time allocations
                         team_ids = inserts.teams;
                         timeAllocations = inserts.timeAllocations; // updated time allocations
@@ -652,6 +655,11 @@ export abstract class Roadmap {
                     if(!dMatch || (dMatch && gd.length)) {
                         const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, d.startDate, d.endDate, d.updateDate]);
                         did = row.lastInsertRowid;
+                        if(dMatch) {
+                            changes.updated += 1;
+                        } else {
+                            changes.added += 1;
+                        }
                     } else {
                         did = dMatch.id;
                     }
@@ -666,8 +674,9 @@ export abstract class Roadmap {
                 }
 
             });
+            return changes;
         });
 
-        insertDeliverables(deliverables);
+        return insertDeliverables(deliverables);
     }
 }
