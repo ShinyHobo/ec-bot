@@ -515,13 +515,20 @@ module.exports = {
 
                     const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
 
-                    const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, d.startDate, d.endDate, d.updateDate]);
+                    let did = null;
+                    if(!dMatch || (dMatch && gd.length)) {
+                        const row = deliverableInsert.run([d.uuid, d.slug, d.title, d.description, now, d.numberOfDisciplines, d.numberOfTeams, d.totalCount, card_id, projectIds, d.startDate, d.endDate, d.updateDate]);
+                        did = row.lastInsertRowid;
+                    } else {
+                        did = dMatch.id;
+                    }
+
                     team_ids.forEach((tid) => {
-                        deliverableTeamsInsert.run([row.lastInsertRowid, tid]);
+                        deliverableTeamsInsert.run([did, tid]);
                     });
 
                     timeAllocation_ids.forEach((taid) => {
-                        deliverableTimeAllocationsInsert.run([row.lastInsertRowid, taid]);
+                        deliverableTimeAllocationsInsert.run([did, taid]);
                     });
                 }
                 
