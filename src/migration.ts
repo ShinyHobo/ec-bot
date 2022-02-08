@@ -7,7 +7,6 @@ export default abstract class Migration {
         const migrate = db.transaction(() => {
             db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
-            db.prepare("CREATE TABLE IF NOT EXISTS roadmap(json TEXT, date INTEGER, PRIMARY KEY(date))").run();
 
             // add json data format as tables
             db.prepare("CREATE TABLE IF NOT EXISTS deliverable_diff ("+

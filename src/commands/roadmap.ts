@@ -229,6 +229,7 @@ module.exports = {
 
                 // TODO - troubleshoot inserts to ensure accurate change logging
                 // TODO - replace card_diff updateDate time with epoch int
+                // TODO - prevent duplicate cards if no changes have been detected
 
                 this.insertChanges(db, compareTime, this.adjustDeliverables(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
