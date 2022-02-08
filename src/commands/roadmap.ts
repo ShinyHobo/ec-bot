@@ -206,6 +206,8 @@ module.exports = {
                     insert = !_.isEqual(existingRoadmap.json, newRoadmap);
                 }
 
+                // TODO - Replace json storing and comparison with db update, then call compare using that data
+
                 // TODO remove true
                 if(insert||true) {
                     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
@@ -229,6 +231,8 @@ module.exports = {
         const last = JSON.parse(results[0].json);
 
         // TODO - reduce code reuse
+        // only required for new data; "first" data is pulled from the database
+        // potentially use backup data files for db initialization
         first.forEach((d)=>{
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
@@ -399,9 +403,15 @@ module.exports = {
         // most recently removed -> AND addedDate IN (SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1)
         let dbTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NOT NULL AND endDate IS NOT NULL").all();
         const dbRemovedTeams = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug) WHERE startDate IS NULL AND endDate IS NULL").all();
-        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${dbDeliverables.map((dd) => dd.id).toString()}))`).all();
+        const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
+        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
+        
         const dbCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NOT NULL AND release_id IS NOT NULL AND release_title IS NOT NULL").all();
         const dbRemovedCards = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM card_diff GROUP BY id) WHERE updateDate IS NULL AND release_id IS NULL AND release_title IS NULL").all();
+
+        const dbTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NOT NULL AND endDate IS NOT NULL");
+        const dbRemovedTimeAllocations = db.prepare("SELECT * FROM (SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid) WHERE startDate IS NULL AND endDate IS NULL");
+        const dbDeliverableTimeAllocations = db.prepare(`SELECT * FROM timeAllocation_diff WHERE id IN (SELECT timeAllocation_id FROM deliverable_timeAllocations WHERE deliverable_id IN (${mostRecentDeliverableIds}))`);
 
         // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 

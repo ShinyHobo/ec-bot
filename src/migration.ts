@@ -42,15 +42,6 @@ export default abstract class Migration {
                 "deliverable_id INTEGER,"+
                 "team_id INTEGER,"+
                 "PRIMARY KEY(deliverable_id,team_id))").run();
-            db.prepare("CREATE TABLE IF NOT EXISTS timeAllocation_diff("+
-                "id INTEGER NOT NULL UNIQUE,"+
-                "startDate INTEGER,"+
-                "endDate INTEGER,"+
-                "addedDate INTEGER,"+
-                "uuid TEXT,"+
-                "partialTime INTEGER,"+
-                "team_id INTEGER,"+
-                "PRIMARY KEY(id AUTOINCREMENT))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS card_diff ("+
                 "id INTEGER NOT NULL UNIQUE,"+
                 "tid INTEGER,"+
@@ -63,6 +54,20 @@ export default abstract class Migration {
                 "addedDate INTEGER,"+
                 "thumbnail TEXT,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
+            db.prepare("CREATE TABLE IF NOT EXISTS timeAllocation_diff("+
+                "id INTEGER NOT NULL UNIQUE,"+
+                "startDate INTEGER,"+
+                "endDate INTEGER,"+
+                "addedDate INTEGER,"+
+                "uuid TEXT,"+
+                "partialTime INTEGER,"+
+                "team_id INTEGER,"+
+                "PRIMARY KEY(id AUTOINCREMENT))").run();
+            db.prepare("CREATE TABLE IF NOT EXISTS deliverable_timeAllocations("+
+                "deliverable_id INTEGER,"+
+                "timeAllocation_id INTEGER,"+
+                "PRIMARY KEY(deliverable_id,timeAllocation_id))").run();
+            
         });
 
         migrate();
