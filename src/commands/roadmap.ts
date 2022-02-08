@@ -460,7 +460,8 @@ module.exports = {
                         const cMatch = dbCards.find((dc) => dc.id === d.card.id);
                         const cgd = diff.getDiff(cMatch, d.card).filter((df) => df.op === 'update');
                         if(!cMatch || cgd.length) {
-                            cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
+                            const row = cardsInsert.run([d.card.tid, d.card.title, d.card.description, d.card.category, d.card.release_id, d.card.release_title, d.card.updateDate, now, d.card.thumbnail]);
+                            card_id = row.lastInsertRowid;
                         }
                     }
 
