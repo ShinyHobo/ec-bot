@@ -358,9 +358,14 @@ export abstract class Roadmap {
 
         const first = this.buildDeliverables(start, db);
         const last = this.buildDeliverables(end, db);
+        const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
 
         let messages = [];
         const compareTime = Date.now();
+        let changes = {added: 0, removed: 0, updated: 0, readded: 0};
+
+        messages.push(`Progress Report Delta | ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()}\n`);
+        messages.push('===================================================================================================\n\n');
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
@@ -370,6 +375,7 @@ export abstract class Roadmap {
                 messages.push(he.unescape(`\* ${d.title}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
+                changes.removed++;
             });
             messages.push('===================================================================================================\n\n');
         }
@@ -378,11 +384,16 @@ export abstract class Roadmap {
         if(newDeliverables.length) {
             messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
             newDeliverables.forEach(d => {
+                const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
+                if(dMatch) {
+                    changes.readded++;
+                }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
                 messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
                 messages.push(he.unescape(`${start} => ${end}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+                changes.added++;
 
                 // TODO - cards, teams, time allocations
             });
@@ -395,15 +406,15 @@ export abstract class Roadmap {
             let updatedMessages = [];
             remainingDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
-                const d = diff.getDiff(f, l);
+                const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
-                    const changes = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
 
-                    if(changes.some(p => p.op === 'update' && (p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description'))) {
+                    if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                         let update = `\* **${title}**\n`;
 
-                        if(changes.some(p => p.change === 'startDate')) {
+                        if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
                             const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.startDate);
@@ -420,7 +431,7 @@ export abstract class Roadmap {
 
                             update += `Start date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
                         }
-                        if(changes.some(p => p.change === 'endDate')) {
+                        if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
                             const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.endDate);
@@ -438,22 +449,34 @@ export abstract class Roadmap {
                             update += `End date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
                         }
 
-                        if(changes.some(p => p.change === 'title')) {
+                        if(dChanges.some(p => p.change === 'title')) {
                             update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
                         }
-                        if(changes.some(p => p.change === 'description')) {
+                        if(dChanges.some(p => p.change === 'description')) {
                             update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
                         }
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
 
                         // TODO - cards, teams, time allocations
+                        changes.updated++;
+                    }
+
+                    if(dChanges.some(p => p.change === 'teams')) {
+                        
+                        // 0:'teams'
+                        // 1:0
+                        // 2:'timeAllocations'
+                        // 3:4
+                        // 4:'deliverable_id'
                     }
                 }
             });
             messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
             messages = messages.concat(updatedMessages);
             messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*`);
+            const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
+            messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.\n`));
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
@@ -556,7 +579,7 @@ export abstract class Roadmap {
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
-            let changes = {added: 0, removed: 0, updated: 0, readded: 0, c: []};
+            let changes = {added: 0, removed: 0, updated: 0, readded: 0};
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -690,7 +713,7 @@ export abstract class Roadmap {
      * @returns The list of deliverables
      */
     private static buildDeliverables(date: number, db: Database): any[] {
-        let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
+        let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
         let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
         dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && r.title === d.title && !r.title.includes("Unannounced"))));
         const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
@@ -715,6 +738,10 @@ export abstract class Roadmap {
             d.teams.forEach((t) => {
                 t.timeAllocations = timeAllocations[t.id];
             });
+            
+            delete(d.id);
+            delete(d.max);
+            delete(d.addedDate);
         });
 
         return dbDeliverables;
