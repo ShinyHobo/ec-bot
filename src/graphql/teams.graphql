@@ -1,0 +1,48 @@
+query teams($startDate: String!, $endDate: String!, $search: String, $teamSlug: String, $deliverableSlug: String, $projectSlugs: [String], $disciplineSlugs: [String], $sortBy: SortMethod, $offset: Int, $limit: Int) {
+  progressTracker {
+    teams(
+      startDate: $startDate
+      endDate: $endDate
+      search: $search
+      teamSlug: $teamSlug
+      deliverableSlug: $deliverableSlug
+      projectSlugs: $projectSlugs
+      disciplineSlugs: $disciplineSlugs
+      sortBy: $sortBy
+      offset: $offset
+      limit: $limit
+    ) {
+      totalCount
+      metaData {
+        ...Team
+        timeAllocations {
+          ...TimeAllocation
+          # __typename
+        }
+        # __typename
+      }
+      # __typename
+    }
+    # __typename
+  }
+}
+
+fragment Team on Team {
+  title
+  description
+  #uuid <- unique to each team/time allocation combination
+  abbreviation
+  startDate
+  endDate
+  numberOfDeliverables
+  slug
+  # __typename
+}
+
+fragment TimeAllocation on TimeAllocation {
+  startDate
+  endDate
+  uuid
+  partialTime
+  # __typename
+}
