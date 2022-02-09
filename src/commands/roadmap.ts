@@ -356,19 +356,25 @@ export abstract class Roadmap {
 
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
 
-        // let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
-        // const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();//.flatMap(d => d[0]);
-        // const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
-        // dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
+        const getCorrectedDeliverables = (time: number): any[] => {
+            let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) FROM deliverable_diff WHERE addedDate <= ${time} GROUP BY uuid ORDER BY addedDate DESC`).all();
+            const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+            const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
+            dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
+
+            // TODO - get cards, teams, and time allocations
+            // build deliverable objects
+
+            return dbDeliverables;
+        };
+
+        const dbDeliverablesStart = getCorrectedDeliverables(start);
+        const dbDeliverablesEnd = getCorrectedDeliverables(end);
+
+        let sner = "";
+        let bler = sner;
 
         // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
-
-        // const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
-        // if(!results || results.length < 2) {
-        //     return msg.channel.send('More than one roadmap snapshot is needed to compare. Pull and try again later.').catch(console.error);
-        // }
-
-        // const lastUpdate = db.prepare("SELECT MAX(addedDate) as date FROM deliverable_diff").get();
 
         // const first = JSON.parse(results[1].json);
         // const last = JSON.parse(results[0].json);
