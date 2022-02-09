@@ -480,20 +480,23 @@ export abstract class Roadmap {
             
             messages.push('===================================================================================================\n\n');
 
-            messages.push('Currently scheduled tasks:\n');
-
-            // TODO - NEED FULL TIME SPAN, CURRENTLY ONLY HAVE TWO WEEKS
             const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND endDate >= ${compareTime} AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
             const currentTasks = db.prepare(`SELECT id FROM deliverable_diff WHERE id IN(${scheduledTasks.map(t => t.deliverable_id).toString()}) ORDER BY title`).all();
             const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
+            const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
+
+            messages.push(`There are currently ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:\n`);
+
             currentTasks.forEach((t) => {
                 const match = last.find(l => l.id === t.id);
                 const schedules = groupedTasks[t.id];
                 const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-                messages.push(`\n**${match.title}**\n`);
+                messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
                 teams.forEach(mt => {
+                    // TODO - NEED FULL TIME SPAN, CURRENTLY ONLY HAVE TWO WEEKS
+                    // TODO - Investigate split time teams (breaks inbetween)
                     const matchSchedule = schedules.find(s => mt.id === s.team_id);
-                    messages.push(`* ${mt.title} (${mt.abbreviation}) until ${new Date(matchSchedule.endDate).toDateString()}\n`);
+                    messages.push(`* ${mt.title} (${mt.abbreviation})${mt.partial?"[PT]":""} until ${new Date(matchSchedule.endDate).toDateString()}\n`);
                 });
             });
         }
