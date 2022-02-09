@@ -493,15 +493,31 @@ export abstract class Roadmap {
                 const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
                 messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
                 teams.forEach(mt => {
-                    // TODO - NEED FULL TIME SPAN, CURRENTLY ONLY HAVE TWO WEEKS
-                    // TODO - Investigate split time teams (breaks inbetween)
+                    const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());//.sort((a,b) => a.startDate - b.startDate);
+                    const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
+
+                    // let bler = returnRanges.map(rr => ({startDate: new Date(rr.startDate).toUTCString(), endDate: new Date(rr.endDate).toUTCString()}));
+
+                    if(t.did === 918) {
+                        let sner = "";
+                        let bler = sner;
+                    }
+
                     const matchSchedule = schedules.find(s => mt.id === s.team_id);
-                    messages.push(`* ${mt.title} (${mt.abbreviation})${mt.partial?"[PT]":""} until ${new Date(matchSchedule.endDate).toDateString()}\n`);
+                    const matchMergedSchedule = mergedSchedules.find(ms => ms.startDate <= matchSchedule.startDate && matchSchedule.endDate <= ms.endDate);
+
+                    if(matchMergedSchedule) {
+                        messages.push(`* ${mt.title} (${mt.abbreviation})${mt.partial?"[PT]":""} until ${new Date(matchMergedSchedule.endDate).toDateString()}\n`);
+                    } else {
+                        let sner = "";
+                        let bler = sner;
+                    }
                 });
             });
+            let sner = "";
         }
 
-        await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
+        await msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
     }
 
     /**
@@ -741,8 +757,8 @@ export abstract class Roadmap {
      * @param ranges The date ranges to merge
      * @returns The merged date ranges
      */
-    private static mergeDateRanges(ranges, did) {
-        ranges = ranges.sort((a,b) => a.startDate - b.endDate);
+    private static mergeDateRanges(ranges) {
+        ranges = ranges.sort((a,b) => a.startDate - b.startDate);
 
         let returnRanges = [];
         let currentRange = null;
@@ -759,8 +775,9 @@ export abstract class Roadmap {
 
             const currentEndDate = new Date(currentRange.endDate);
             currentEndDate.setDate(currentEndDate.getDate() + 1);
+            const currentEndTime = currentEndDate.getTime();
 
-            if (currentEndDate.getTime() < r.startDate) {
+            if (currentEndTime != r.startDate) {
                 returnRanges.push(currentRange);
                 currentRange = r;
             } else if (currentRange.endDate < r.endDate) {
