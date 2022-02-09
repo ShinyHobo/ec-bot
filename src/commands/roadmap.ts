@@ -78,11 +78,6 @@ export abstract class Roadmap {
      * @param db The database connection
      */
     public static execute(msg: Message, args: Array<string>, db: Database) {
-        if(args.length !== 1) {
-            msg.channel.send(this.usage).catch(console.error);
-            return;
-        }
-
         // const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
         // if(officer && !msg.member.roles.highest.comparePositionTo(officer)) {
         //     // inufficient privileges
@@ -94,7 +89,7 @@ export abstract class Roadmap {
                 this.delta(msg, db);
                 break;
             case 'compare':
-                this.compare([], msg, db);
+                this.compare(args, msg, db);
                 break;
             case 'teams':
                 // TODO display current work being done based on team start/end dates from timeAllocations_diff table
@@ -269,12 +264,8 @@ export abstract class Roadmap {
                     
                     const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
                     fs.readdirSync(initializationDataDir).forEach((file) => {
-                        const year = +file.substring(0, 4);
-                        const month = +file.substring(4, 6);
-                        const day = +file.substring(6, 8);
-                        const date = new Date(year, month - 1, day).getTime();
                         const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        this.insertChanges(db, date, this.adjustData(data));
+                        this.insertChanges(db, this.convertDateToTime(file), this.adjustData(data));
                     });
                 }
 
@@ -332,29 +323,45 @@ export abstract class Roadmap {
      * @param db The database connection
      */
     private static async compare(argv: Array<string>, msg: Message, db: Database) {
-        // const dbDate = new Date(start).toISOString().split("T")[0].replace(/-/g,'');
-        // const existingRoadmap: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC').get();
-        // const newRoadmap = JSON.stringify(deliverables, null, 2)
+        let start: number = null;
+        let end: number = null;
 
-        // let insert = !existingRoadmap;
+        const args = require('minimist')(argv.slice(1));
 
-        // if(existingRoadmap) {
-        //     insert = !_.isEqual(existingthis.json, newRoadmap);
-        // }
+        // select closest existing date prior to or on entered date
+        if(args['e']) {
+            if(Number(args['e'])) {
+                const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['e'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                end = dbEnd && dbEnd.addedDate;
+            }
+        } else {
+            const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+            end = dbEnd && dbEnd.addedDate;
+        }
 
-        // if(insert) {
-        //     db.prepare("INSERT OR REPLACE INTO roadmap (json, date) VALUES (?,?)").run([newRoadmap, dbDate]);
-        //     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms. Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-        //     await this.compare([], msg, db, true);
-        // } else {
-        //     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-        // }
+        if(args['s']) {
+            if(Number(args['s'])) {
+                const dbStart = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['s'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                start = dbStart && dbStart.addedDate;
+            }
+        } else {
+            // determine date immediately before end
+            const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
+            start = dbStart && dbStart.addedDate;
+        }
+        
+        if(!start || !end || start >= end ) {
+            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+        }
 
-        // TODO add start/end filter
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
 
+        // let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
+        // const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();//.flatMap(d => d[0]);
+        // const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
+        // dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
 
-
+        // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 
         // const results: any = db.prepare('SELECT * FROM roadmap ORDER BY date DESC LIMIT 2').all();
         // if(!results || results.length < 2) {
@@ -480,15 +487,6 @@ export abstract class Roadmap {
     }
 
     /**
-     * Shortens text to 100 characters per line for discord display
-     * @param text The text to shorten
-     * @returns The shortened text
-     */ 
-    private static shortenText(text): string {
-        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
-    }
-
-    /**
      * Looks up raw data for a given time period or date [TODO]
      * @param argv The available arguments
      * @param msg The command message
@@ -511,6 +509,8 @@ export abstract class Roadmap {
         // if('e' in argv) {
         //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         // }
+
+        // SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC <- available dates
     }
 
     /** 
@@ -529,7 +529,7 @@ export abstract class Roadmap {
 
         // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
         let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
-        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();//.flatMap(d => d[0]);
+        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
         const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
         dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
 
@@ -538,8 +538,6 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare("SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid");
- 
-        // teams from deliverables -> db.prepare("SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (SELECT id FROM deliverable_diff WHERE uuid = '[uuid here]' ORDER BY addedDate DESC LIMIT 1))").all();
 
         const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
         const removedDeliverables = dbDeliverables.filter(f => !deliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))) &&
@@ -688,4 +686,27 @@ export abstract class Roadmap {
 
         return insertDeliverables(deliverables);
     }
+
+    //#region Helper methods
+    /**
+     * Shortens text to 100 characters per line for discord display
+     * @param text The text to shorten
+     * @returns The shortened text
+     */ 
+     private static shortenText(text): string {
+        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
+    }
+    
+    /**
+     * The YYYYMMDD date to convert
+     * @param date The date to convert
+     * @returns The date as an epoch timestamp in ms
+     */
+     private static convertDateToTime(date: string): number {
+        const year = +date.substring(0, 4);
+        const month = +date.substring(4, 6);
+        const day = +date.substring(6, 8);
+        return new Date(year, month - 1, day).getTime();
+    }
+    //#endregion
 }
