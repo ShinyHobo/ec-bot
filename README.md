@@ -5,7 +5,7 @@ Discord bot for Enemy Contact
 - !ping: Replies with pong.
 - !verify [RSI USERNAME]: Attempts to verify that Discord account owns RSI user.
 - !renew [on/off]: Turns thread auto renewal on/off.
-- !roadmap [pull/compare]: Pulls down current state of roadmap and compares the most recent pull to the previous.
+- !roadmap [pull/compare] optional:[-s start_time(YYYYMMDD)/-e end_time(YYYYMMDD)]: Pulls down current state of roadmap and compares the most recent pull to the previous.
 - !help: Shows all commands
 
 ## Setup
