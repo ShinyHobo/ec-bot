@@ -371,8 +371,8 @@ export abstract class Roadmap {
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
             removedDeliverables.forEach(d => {
-                // mark previous timespan
-                messages.push(he.unescape(`\* ${d.title}\n`.toString()));
+                messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
+                messages.push(`- Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}\n`);
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
@@ -391,7 +391,7 @@ export abstract class Roadmap {
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
                 messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
-                messages.push(he.unescape(`${start} => ${end}\n`.toString()));
+                messages.push(he.unescape(`- ${start} => ${end}\n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
                 changes.added++;
 
@@ -412,7 +412,7 @@ export abstract class Roadmap {
 
                     if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `\* **${title}**\n`;
+                        let update = `\* **${title.trim()}**\n`;
 
                         if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
