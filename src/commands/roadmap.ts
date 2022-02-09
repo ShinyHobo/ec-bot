@@ -280,10 +280,15 @@ export abstract class Roadmap {
 
                 const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
                 console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
-                const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
-                msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                    `\n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.\n`+
-                    ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+
+                if(changes.updated || changes.removed || changes.readded || changes.added) {
+                    const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
+                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
+                        `\n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.\n`+
+                        ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                } else {
+                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                }
 
             }).catch(console.error);
         }).catch(console.error);
