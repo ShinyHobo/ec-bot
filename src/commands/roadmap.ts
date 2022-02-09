@@ -329,7 +329,7 @@ export abstract class Roadmap {
         const args = require('minimist')(argv.slice(1));
 
         // select closest existing date prior to or on entered date
-        if(args['e']) {
+        if(args['e'] && args['e'] !== true) {
             if(Number(args['e'])) {
                 const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['e'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
                 end = dbEnd && dbEnd.addedDate;
@@ -339,7 +339,7 @@ export abstract class Roadmap {
             end = dbEnd && dbEnd.addedDate;
         }
 
-        if(args['s']) {
+        if(args['s'] && args['s'] !== true) {
             if(Number(args['s'])) {
                 const dbStart = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['s'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
                 start = dbStart && dbStart.addedDate;
