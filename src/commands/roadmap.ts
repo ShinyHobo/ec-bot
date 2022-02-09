@@ -356,34 +356,8 @@ export abstract class Roadmap {
 
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
 
-        const getCorrectedDeliverables = (time: number): any[] => {
-            let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) FROM deliverable_diff WHERE addedDate <= ${time} GROUP BY uuid ORDER BY addedDate DESC`).all();
-            const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
-            const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
-            dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
-            
-            const cardIds = dbDeliverables.filter((dd) => dd.card_id).map((dd) => dd.card_id).toString();
-            const dbCards = db.prepare(`SELECT * FROM card_diff WHERE id IN (${cardIds})`).all();
-
-            const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
-
-            // TODO - get teams and time allocations
-            // let dbTeams = db.prepare("SELECT *, MAX(addedDate) FROM team_diff GROUP BY slug").all();
-            // const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
-            
-            // let dbTimeAllocations = db.prepare("SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid").all();
-
-            // build deliverable objects
-
-            dbDeliverables.forEach((d) => {
-                d.card = dbCards.find((c) => c.id === d.card_id);
-            });
-
-            return dbDeliverables;
-        };
-
-        const dbDeliverablesStart = getCorrectedDeliverables(start);
-        const dbDeliverablesEnd = getCorrectedDeliverables(end);
+        const dbDeliverablesStart = this.buildDeliverables(start, db);
+        const dbDeliverablesEnd = this.buildDeliverables(end, db);
 
         let sner = "";
         let bler = sner;
@@ -728,5 +702,40 @@ export abstract class Roadmap {
         const day = +date.substring(6, 8);
         return new Date(year, month - 1, day).getTime();
     }
+
+    /**
+     * Looks up deliverables for a given date and connects the associated teams, cards, and time allocations
+     * @param date The date to lookup data for
+     * @param db The database connection
+     * @returns The list of deliverables
+     */
+    private static buildDeliverables(date: number, db: Database): any[] {
+        let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
+        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
+        dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
+        
+        const cardIds = dbDeliverables.filter((dd) => dd.card_id).map((dd) => dd.card_id).toString();
+        const dbCards = db.prepare(`SELECT * FROM card_diff WHERE id IN (${cardIds})`).all();
+
+        const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
+        
+        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
+        const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
+        
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) GROUP BY uuid`).all();
+        dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
+
+        dbDeliverables.forEach((d) => {
+            d.card = dbCards.find((c) => c.id === d.card_id);
+            const timeAllocations = _.groupBy(dbTimeAllocations[d.id], 'team_id');
+            d.teams = dbDeliverableTeams.filter(t => deliverableTeams[d.id] && deliverableTeams[d.id].some(tid => t.id === tid.team_id));
+            d.teams.forEach((t) => {
+                t.timeAllocations = timeAllocations[t.id];
+            });
+        });
+
+        return dbDeliverables;
+    };
     //#endregion
 }
