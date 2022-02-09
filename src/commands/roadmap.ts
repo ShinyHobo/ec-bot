@@ -473,11 +473,29 @@ export abstract class Roadmap {
             });
             messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
             messages = messages.concat(updatedMessages);
-            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*`);
+            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*\n\n`);
+            
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.\n`));
+            
+            messages.push('===================================================================================================\n\n');
 
-            // TODO - Current tasks output
+            messages.push('Currently scheduled tasks:\n');
+
+            // TODO - NEED FULL TIME SPAN, CURRENTLY ONLY HAVE TWO WEEKS
+            const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND endDate >= ${compareTime} AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
+            const currentTasks = db.prepare(`SELECT id FROM deliverable_diff WHERE id IN(${scheduledTasks.map(t => t.deliverable_id).toString()}) ORDER BY title`).all();
+            const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
+            currentTasks.forEach((t) => {
+                const match = last.find(l => l.id === t.id);
+                const schedules = groupedTasks[t.id];
+                const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
+                messages.push(`\n**${match.title}**\n`);
+                teams.forEach(mt => {
+                    const matchSchedule = schedules.find(s => mt.id === s.team_id);
+                    messages.push(`* ${mt.title} (${mt.abbreviation}) until ${new Date(matchSchedule.endDate).toDateString()}\n`);
+                });
+            });
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
@@ -747,10 +765,6 @@ export abstract class Roadmap {
             d.teams.forEach((t) => {
                 t.timeAllocations = timeAllocations[t.id];
             });
-            
-            delete(d.id);
-            delete(d.max);
-            delete(d.addedDate);
         });
 
         return dbDeliverables;
