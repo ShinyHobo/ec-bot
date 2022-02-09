@@ -20,7 +20,7 @@ export abstract class Roadmap {
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
     
     /** The bot command pattern */
-    public static readonly usage = 'Usage: `!roadmap [pull/compare]`';
+    public static readonly usage = 'Usage: `!roadmap [pull/compare] optional:[-s start_time(YYYYMMDD)/-e end_time(YYYYMMDD)]`';
     //#endregion
 
     //#region Private properies
