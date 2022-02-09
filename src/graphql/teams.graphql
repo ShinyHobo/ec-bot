@@ -29,13 +29,13 @@ query teams($startDate: String!, $endDate: String!, $search: String, $teamSlug: 
 
 fragment Team on Team {
   title
-  # description
-  # uuid
-  # abbreviation
-  # startDate
-  # endDate
-  # numberOfDeliverables
-  # slug
+  description
+  #uuid <- unique to each team/time allocation combination
+  abbreviation
+  startDate
+  endDate
+  numberOfDeliverables
+  slug
   # __typename
 }
 

@@ -1,10 +1,27 @@
 import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
-module.exports = {
-    name: '!verify',
-    description: 'Attempts to verify the discord user on RSI',
-    usage: 'Usage: `!verify [RSI USERNAME]`',
-    execute(msg: Message, args: Array<string>, db: Database) {
+
+/**
+ * Bot command for verifying and associating a given Discord user with an RSI account
+ * Provides the 'RSI Verified' Discord role
+ */
+export abstract class Verify {
+    /** The bot base command */
+    public static command = '!verify';
+
+    /** The functionality of the command */
+    public static description = 'Attempts to verify the discord user on RSI';
+
+    /** The bot command pattern */
+    public static usage = 'Usage: `!verify [RSI USERNAME]`';
+
+    /**
+     * Executes the bot commands
+     * @param msg The msg that triggered the command
+     * @param args Available arguments included with the command
+     * @param db The database connection
+     */
+    public static execute(msg: Message, args: Array<string>, db: Database) {
         if(!msg.guild) {
             msg.reply('Command must be run from within server!').catch(console.error);
             return;
