@@ -92,8 +92,7 @@ export abstract class Roadmap {
                 this.compare(args, msg, db);
                 break;
             case 'teams':
-                // TODO display current work being done based on team start/end dates from timeAllocations_diff table
-                console.log("!roadmap teams not implemented yet");
+                this.lookup(["-t"], msg, db);
                 break;
             default:
                 msg.channel.send(this.usage).catch(console.error);
@@ -482,30 +481,10 @@ export abstract class Roadmap {
             messages.push(this.shortenText("This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
                 "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time).\n"));
 
-            const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
-            const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
-            const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
-            const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
-
-            messages.push(`There are currently ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:\n`);
-
-            currentTasks.forEach((t) => {
-                const match = last.find(l => l.id === t.did);
-                const schedules = groupedTasks[t.did];
-                const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-                messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
-                teams.forEach(mt => {
-                    const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
-                    const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
-                    const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-                    matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
-                        messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}\n`);
-                    });
-                });
-            });
+            messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
 
-        await msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
+        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
     }
 
     /**
@@ -532,15 +511,49 @@ export abstract class Roadmap {
         //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         // }
 
-        // available dates
-        // SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC
-
         // get currently scheduled deliverables
         // SELECT * FROM deliverable_diff WHERE id IN(
         //     SELECT deliverable_id FROM timeAllocation_diff WHERE startDate <= now AND endDate >= now AND deliverable_id IN ([current deliverable ids])
         //     GROUP BY deliverable_id
         //     ORDER BY deliverable_id)
         // ORDER BY title
+    }
+
+    /**
+     * Generates a report for the items being worked on at the given time
+     * @param compareTime The time to lookup time allocations with
+     * @param deliverables The list of deliverables to generate the report for
+     * @param db The database connection
+     * @returns The report lines array
+     */
+    private static generateTeamSprintReport(compareTime: number, deliverables: any[], db: Database): string[] {
+        let messages = [];
+        const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
+        const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
+        const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
+        const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
+
+        let deltas = this.getDeliverableDeltaDateList(db);
+        let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
+
+        messages.push(`There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:\n`);
+
+        currentTasks.forEach((t) => {
+            const match = deliverables.find(l => l.id === t.did);
+            const schedules = groupedTasks[t.did];
+            const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
+            messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
+            teams.forEach(mt => {
+                const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
+                const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
+                const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+                matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
+                    messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}\n`);
+                });
+            });
+        });
+
+        return messages;
     }
 
     /** 
@@ -726,6 +739,15 @@ export abstract class Roadmap {
      */ 
      private static shortenText(text): string {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
+    }
+
+    /**
+     * Provides the list of available delta update dates
+     * @param db The database connection
+     * @returns The distinct list of delta update dates in descending order
+     */
+    private static getDeliverableDeltaDateList(db: Database): number[] {
+        return db.prepare("SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC").all().map(d => d.addedDate);
     }
     
     /**
