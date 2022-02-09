@@ -479,6 +479,8 @@ export abstract class Roadmap {
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.\n`));
             
             messages.push('===================================================================================================\n\n');
+            messages.push(this.shortenText("This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
+                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time).\n"));
 
             const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
             const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
@@ -493,28 +495,14 @@ export abstract class Roadmap {
                 const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
                 messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
                 teams.forEach(mt => {
-                    const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());//.sort((a,b) => a.startDate - b.startDate);
+                    const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
                     const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
-
-                    // let bler = returnRanges.map(rr => ({startDate: new Date(rr.startDate).toUTCString(), endDate: new Date(rr.endDate).toUTCString()}));
-
-                    if(t.did === 918) {
-                        let sner = "";
-                        let bler = sner;
-                    }
-
-                    const matchSchedule = schedules.find(s => mt.id === s.team_id);
-                    const matchMergedSchedule = mergedSchedules.find(ms => ms.startDate <= matchSchedule.startDate && matchSchedule.endDate <= ms.endDate);
-
-                    if(matchMergedSchedule) {
-                        messages.push(`* ${mt.title} (${mt.abbreviation})${mt.partial?"[PT]":""} until ${new Date(matchMergedSchedule.endDate).toDateString()}\n`);
-                    } else {
-                        let sner = "";
-                        let bler = sner;
-                    }
+                    const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+                    matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
+                        messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}\n`);
+                    });
                 });
             });
-            let sner = "";
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
