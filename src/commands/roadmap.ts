@@ -480,16 +480,16 @@ export abstract class Roadmap {
             
             messages.push('===================================================================================================\n\n');
 
-            const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND endDate >= ${compareTime} AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
-            const currentTasks = db.prepare(`SELECT id FROM deliverable_diff WHERE id IN(${scheduledTasks.map(t => t.deliverable_id).toString()}) ORDER BY title`).all();
+            const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${last.map(l => l.id).toString()})`).all();
+            const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
             const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
             const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
 
             messages.push(`There are currently ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:\n`);
 
             currentTasks.forEach((t) => {
-                const match = last.find(l => l.id === t.id);
-                const schedules = groupedTasks[t.id];
+                const match = last.find(l => l.id === t.did);
+                const schedules = groupedTasks[t.did];
                 const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
                 messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
                 teams.forEach(mt => {
@@ -737,6 +737,45 @@ export abstract class Roadmap {
     }
 
     /**
+     * Merges schedule block date ranges that end and begin on the same day
+     * @param ranges The date ranges to merge
+     * @returns The merged date ranges
+     */
+    private static mergeDateRanges(ranges, did) {
+        ranges = ranges.sort((a,b) => a.startDate - b.endDate);
+
+        let returnRanges = [];
+        let currentRange = null;
+        ranges.forEach((r) => {
+            // bypass invalid value
+            if (r.startDate >= r.endDate) {
+                return;
+            }
+            //fill in the first element
+            if (!currentRange) {
+                currentRange = r;
+                return;
+            }
+
+            const currentEndDate = new Date(currentRange.endDate);
+            currentEndDate.setDate(currentEndDate.getDate() + 1);
+
+            if (currentEndDate.getTime() < r.startDate) {
+                returnRanges.push(currentRange);
+                currentRange = r;
+            } else if (currentRange.endDate < r.endDate) {
+                currentRange.endDate = r.endDate;
+            }
+        });
+
+        if(currentRange) {
+            returnRanges.push(currentRange);
+        }
+
+        return returnRanges;
+    }
+
+    /**
      * Looks up deliverables for a given date and connects the associated teams, cards, and time allocations
      * @param date The date to lookup data for
      * @param db The database connection
@@ -764,9 +803,14 @@ export abstract class Roadmap {
         dbDeliverables.forEach((d) => {
             d.card = dbCards.find((c) => c.id === d.card_id);
             const timeAllocations = _.groupBy(dbTimeAllocations[d.id], 'team_id');
-            d.teams = dbDeliverableTeams.filter(t => deliverableTeams[d.id] && deliverableTeams[d.id].some(tid => t.id === tid.team_id));
-            d.teams.forEach((t) => {
-                t.timeAllocations = timeAllocations[t.id];
+            const teams = dbDeliverableTeams.filter(t => deliverableTeams[d.id] && deliverableTeams[d.id].some(tid => t.id === tid.team_id));
+            teams.forEach((t) => {
+                if(!d.teams) {
+                    d.teams = [];
+                }
+                let team = _.clone(t);
+                team.timeAllocations = timeAllocations[t.id];
+                d.teams.push(team);
             });
         });
 
