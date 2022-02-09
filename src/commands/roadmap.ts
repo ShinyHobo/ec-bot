@@ -457,11 +457,10 @@ export abstract class Roadmap {
                         }
                         updatedMessages.push(he.unescape(update + '\n'));
                         updatedDeliverables.push(f);
-
-                        // TODO - cards, teams, time allocations
                         changes.updated++;
                     }
 
+                    // TODO - cards, teams, time allocations
                     if(dChanges.some(p => p.change === 'teams')) {
                         
                         // 0:'teams'
@@ -477,6 +476,8 @@ export abstract class Roadmap {
             messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*`);
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.\n`));
+
+            // TODO - Current tasks output
         }
 
         await msg.channel.send({files: [new MessageAttachment(Buffer.from(messages.join(''), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
@@ -506,7 +507,15 @@ export abstract class Roadmap {
         //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         // }
 
-        // SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC <- available dates
+        // available dates
+        // SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC
+
+        // get currently scheduled deliverables
+        // SELECT * FROM deliverable_diff WHERE id IN(
+        //     SELECT deliverable_id FROM timeAllocation_diff WHERE startDate <= now AND endDate >= now AND deliverable_id IN ([current deliverable ids])
+        //     GROUP BY deliverable_id
+        //     ORDER BY deliverable_id)
+        // ORDER BY title
     }
 
     /** 
@@ -533,7 +542,7 @@ export abstract class Roadmap {
         const mostRecentDeliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
-        let dbTimeAllocations = db.prepare("SELECT *, MAX(addedDate) FROM timeAllocation_diff GROUP BY uuid").all();
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
 
         // TODO - investigate cleaning up removed deliverables code below, check buildDeliverables()
         const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
