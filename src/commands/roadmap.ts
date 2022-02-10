@@ -375,6 +375,7 @@ export abstract class Roadmap {
                 messages.push(he.unescape(`* **${d.title.trim()}**  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
+                messages = [...messages, ...this.generateCardImage(d)];
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
             });
@@ -394,6 +395,7 @@ export abstract class Roadmap {
                 messages.push(he.unescape(`\* **${d.title.trim()}**  \n`.toString()));
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
+                messages = [...messages, ...this.generateCardImage(d)];
                 changes.added++;
 
                 // TODO - cards, teams, time allocations
@@ -459,6 +461,7 @@ export abstract class Roadmap {
                         }
                         updatedMessages.push(he.unescape(update + '  \n'));
                         updatedDeliverables.push(f);
+                        updatedMessages = [...updatedMessages, ...this.generateCardImage(l)];
                         changes.updated++;
                     }
 
@@ -867,5 +870,21 @@ export abstract class Roadmap {
 
         return dbDeliverables;
     };
+
+
+    /**
+     * Generates a markdown card image for display. Github size limit for images is 5 MB
+     * @param deliverable The deliverable to display a card image for
+     * @returns The image messages
+     */
+    private static generateCardImage(deliverable: any): string[] {
+        const messages = [];
+        if(deliverable.card) {
+            const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
+            messages.push(`![](${cardImage})  \n`);
+            messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
+        }
+        return messages;
+    }
     //#endregion
 }
