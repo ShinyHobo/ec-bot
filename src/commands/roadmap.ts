@@ -20,8 +20,8 @@ export abstract class Roadmap {
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
     
     /** The bot command pattern */
-    public static readonly usage = 'Usage: `!roadmap\n\tpull <- Pulls progress tracker delta\n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
-        '<- Generates a delta report for the given dates; leave none for most recent\n\tteams <- Generates a report of currently assigned deliverables`';
+    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
+        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams <- Generates a report of currently assigned deliverables`';
     //#endregion
 
     //#region Private properies
@@ -276,7 +276,7 @@ export abstract class Roadmap {
                 if(changes.updated || changes.removed || changes.readded || changes.added) {
                     const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
                     msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                        `\n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.\n`+
+                        `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
                         ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
                 } else {
                     msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
@@ -365,25 +365,25 @@ export abstract class Roadmap {
         const compareTime = Date.now();
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
-        messages.push(`Progress Report Delta | ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()}\n`);
-        messages.push('===================================================================================================\n\n');
+        messages.push(`# Progress Report Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        messages.push('---  \n\n');
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
-            messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:\n`);
+            messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:  \n`);
             removedDeliverables.forEach(d => {
-                messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
-                messages.push(`- Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}\n`);
-                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(`* **${d.title.trim()}**  \n`.toString()));
+                messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
+                messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
             });
-            messages.push('===================================================================================================\n\n');
+            messages.push('---  \n\n');
         }
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
         if(newDeliverables.length) {
-            messages.push(`[${newDeliverables.length}] deliverable(s) *added*:\n`);
+            messages.push(`[${newDeliverables.length}] deliverable(s) *added*:  \n`);
             newDeliverables.forEach(d => {
                 const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
                 if(dMatch) {
@@ -391,14 +391,14 @@ export abstract class Roadmap {
                 }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`\* **${d.title.trim()}**\n`.toString()));
-                messages.push(he.unescape(`- ${start} => ${end}\n`.toString()));
-                messages.push(he.unescape(this.shortenText(`${d.description}\n`)));
+                messages.push(he.unescape(`\* **${d.title.trim()}**  \n`.toString()));
+                messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
+                messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
                 changes.added++;
 
                 // TODO - cards, teams, time allocations
             });
-            messages.push('===================================================================================================\n\n');
+            messages.push('---  \n\n');
         }
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid));
@@ -413,7 +413,8 @@ export abstract class Roadmap {
 
                     if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `\* **${title.trim()}**\n`;
+                        let update = `**${title.trim()}**  \n`;
+                        update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
 
                         if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
@@ -430,7 +431,7 @@ export abstract class Roadmap {
                                 updateText = "pushed back";
                             }
 
-                            update += `Start date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
+                            update += `\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
                         }
                         if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
@@ -440,23 +441,23 @@ export abstract class Roadmap {
 
                             let updateText = "";
                             if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
-                                updateText = "moved earlier (time allocation removal(s) likely)\n"; // likely team time allocation was removed, but could have finished early
+                                updateText = "moved earlier (time allocation removal(s) likely)  \n"; // likely team time allocation was removed, but could have finished early
                             } else if(oldDate < newDate) {
                                 updateText = "been extended";
                             } else if(newDate < oldDate) {
                                 updateText = "moved closer";
                             }
 
-                            update += `End date has ${updateText} from ${oldDateText} to ${newDateText}\n`;
+                            update += `\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
-                            update += this.shortenText(`Title has been updated from "${f.title}" to "${l.title}"`);
+                            update += this.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`);
                         }
                         if(dChanges.some(p => p.change === 'description')) {
-                            update += this.shortenText(`Description has been updated from\n"${f.description}"\nto\n"${l.description}"`);
+                            update += this.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
                         }
-                        updatedMessages.push(he.unescape(update + '\n'));
+                        updatedMessages.push(he.unescape(update + '  \n'));
                         updatedDeliverables.push(f);
                         changes.updated++;
                     }
@@ -472,16 +473,16 @@ export abstract class Roadmap {
                     }
                 }
             });
-            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:\n`);
+            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:  \n`);
             messages = messages.concat(updatedMessages);
-            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*\n\n`);
+            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*  \n\n`);
             
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
-            messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.\n`));
+            messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
             
-            messages.push('===================================================================================================\n\n');
+            messages.push('---  \n\n');
             messages.push(this.shortenText("This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
-                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time).\n"));
+                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time).  \n"));
 
             messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
@@ -549,19 +550,19 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
-        messages.push(`There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:\n`);
+        messages.push(`There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:  \n`);
 
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-            messages.push(`\n**${match.title}** [${match.project_ids.replace(',', ', ')}]\n`);
+            messages.push(`  \n**${match.title}** [${match.project_ids.replace(',', ', ')}]  \n`);
             teams.forEach(mt => {
                 const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
                 const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
                 const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
                 matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
-                    messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}\n`);
+                    messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
                 });
             });
         });
@@ -751,7 +752,7 @@ export abstract class Roadmap {
      * @returns The shortened text
      */ 
     private static shortenText(text): string {
-        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
+        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}  \n`.toString();
     }
 
     /**
