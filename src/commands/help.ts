@@ -26,7 +26,7 @@ export abstract class Help {
             Object.keys(botCommands).forEach(key => {
                 if(key !== 'default') {
                     const command = botCommands[key][key];
-                    messages.push(`${command.usage.replace('Usage: ','')} | ${command.description}`);
+                    messages.push(`* ${command.description}:\n${command.usage.replace('Usage: ','')}`);
                 }
             });
             msg.channel.send(messages.join('\n'));

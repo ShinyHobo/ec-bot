@@ -10,7 +10,7 @@ export abstract class Verify {
     public static command = '!verify';
 
     /** The functionality of the command */
-    public static description = 'Attempts to verify the discord user on RSI';
+    public static description = 'Attempts to verify your discord user on RSI';
 
     /** The bot command pattern */
     public static usage = 'Usage: `!verify [RSI USERNAME]`';

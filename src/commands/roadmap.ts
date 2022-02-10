@@ -20,7 +20,8 @@ export abstract class Roadmap {
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
     
     /** The bot command pattern */
-    public static readonly usage = 'Usage: `!roadmap [pull/compare] optional:[-s start_time(YYYYMMDD)/-e end_time(YYYYMMDD)]`';
+    public static readonly usage = 'Usage: `!roadmap\n\tpull <- Pulls progress tracker delta\n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
+        '<- Generates a delta report for the given dates; leave none for most recent\n\tteams <- Generates a report of currently assigned deliverables`';
     //#endregion
 
     //#region Private properies
@@ -92,6 +93,7 @@ export abstract class Roadmap {
                 this.compare(args, msg, db);
                 break;
             case 'teams':
+                // TODO - Add args to replace -t if available
                 this.lookup(["-t"], msg, db);
                 break;
             default:
@@ -484,7 +486,7 @@ export abstract class Roadmap {
             messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
 
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), `roadmap_${end}.md`)]}).catch(console.error);
+        this.sendTextMessageFile(messages, `progress_tracker_${end}.md`, msg);
     }
 
     /**
@@ -494,6 +496,24 @@ export abstract class Roadmap {
      * @param db The database connection
      */
     private static lookup(argv: Array<string>, msg: Message, db: Database) {
+        const args = require('minimist')(argv);
+        if('t' in args) {
+            let compareTime = null;
+            if(args['t'] === true) {
+                compareTime = Date.now();
+            } else {
+                compareTime = this.convertDateToTime(args['t']);
+            }
+
+            if(Number(compareTime)) {
+                const deliverables = this.buildDeliverables(compareTime, db);
+                const messages = this.generateTeamSprintReport(compareTime, deliverables, db);
+                this.sendTextMessageFile(messages, `sprint_report_${compareTime}.md`, msg);
+            } else {
+                msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
+            }
+        }
+
         // // only show tasks that complete in the future
         // if('n' in argv) {
         //     const now = Date.now();
@@ -510,13 +530,6 @@ export abstract class Roadmap {
         // if('e' in argv) {
         //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         // }
-
-        // get currently scheduled deliverables
-        // SELECT * FROM deliverable_diff WHERE id IN(
-        //     SELECT deliverable_id FROM timeAllocation_diff WHERE startDate <= now AND endDate >= now AND deliverable_id IN ([current deliverable ids])
-        //     GROUP BY deliverable_id
-        //     ORDER BY deliverable_id)
-        // ORDER BY title
     }
 
     /**
@@ -737,8 +750,18 @@ export abstract class Roadmap {
      * @param text The text to shorten
      * @returns The shortened text
      */ 
-     private static shortenText(text): string {
+    private static shortenText(text): string {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}\n`.toString();
+    }
+
+    /**
+     * Sends a long text message to Discord as a markdown file
+     * @param messages The messags to include in the file
+     * @param filename The filename to use
+     * @param msg The command message
+     */
+    private static sendTextMessageFile(messages: string[], filename: string, msg: Message) {
+        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), filename)]}).catch(console.error);
     }
 
     /**
