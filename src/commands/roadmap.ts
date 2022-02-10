@@ -556,7 +556,7 @@ export abstract class Roadmap {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-            messages.push(`  \n**${match.title}** [${match.project_ids.replace(',', ', ')}]  \n`);
+            messages.push(`  \n**${match.title.trim()}** [${match.project_ids.replace(',', ', ')}]  \n`);
             teams.forEach(mt => {
                 const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
                 const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
