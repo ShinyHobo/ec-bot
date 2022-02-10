@@ -564,8 +564,9 @@ export abstract class Roadmap {
                 const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
                 const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
                 const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+                messages.push(this.shortenText(this.generateGanttChart(mt.title, mergedSchedules, compareTime)));
                 matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
-                    messages.push(`* ${mt.title} (${mt.abbreviation})${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
+                    messages.push(`* ${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
                 });
             });
         });
@@ -782,11 +783,21 @@ export abstract class Roadmap {
      * @param date The date to convert
      * @returns The date as an epoch timestamp in ms
      */
-     private static convertDateToTime(date: string): number {
+    private static convertDateToTime(date: string): number {
         const year = +date.substring(0, 4);
         const month = +date.substring(4, 6);
         const day = +date.substring(6, 8);
         return new Date(year, month - 1, day).getTime();
+    }
+
+    /**
+     * Gets the week for the given date
+     * @param date The date to get the week of
+     * @param firstOfYear The first day of the year
+     * @returns The week of the year
+     */
+    private static getWeek(date: Date, firstOfYear: Date): number { 
+        return Math.ceil((((date.getTime() - firstOfYear.getTime()) / 86400000) + firstOfYear.getDay() + 1) / 7);
     }
 
     /**
@@ -871,6 +882,39 @@ export abstract class Roadmap {
         return dbDeliverables;
     };
 
+    /**
+     * Generates a text based gantt chart displaying weeks
+     * @param team The team name
+     * @param schedules The schedules to chart
+     * @param compareTime The time to generate the chart around (yearly)
+     * @returns A text based, collapsible gantt chart text block
+     */
+     private static generateGanttChart(team: string, schedules, compareTime): string {
+        let gantts = [];
+        let time = new Date(compareTime);
+        let firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
+        schedules.forEach((s) => {
+            let newGantt = new Array(52).fill('..');
+            let start  = new Date(s.startDate);
+            start = start < firstOfYear ? firstOfYear : start;
+            const end = new Date(s.endDate);
+            if(end < start) {
+                return;
+            }
+            const startWeek = this.getWeek(start, firstOfYear);
+            const endWeek = this.getWeek(end, firstOfYear);
+            const thisWeek = this.getWeek(time, firstOfYear);
+            let period = new Array(endWeek + 1 - startWeek).fill('==');
+            newGantt.splice(startWeek - 1, period.length, ...period);
+            if(startWeek <= thisWeek && thisWeek <= endWeek) {
+                newGantt.splice(thisWeek - 1, 1, '=|');
+            } else {
+                newGantt.splice(thisWeek - 1, 1, '.|');
+            }
+            gantts.push(newGantt.join(''));
+        });
+        return `<details><summary>${team}</summary><p>${gantts.join('<br>')}</p></details>`;
+    }
 
     /**
      * Generates a markdown card image for display. Github size limit for images is 5 MB
