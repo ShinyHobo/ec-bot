@@ -484,8 +484,8 @@ export abstract class Roadmap {
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
             
             messages.push('---  \n\n');
-            messages.push(this.shortenText("This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
-                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time).  \n"));
+            messages.push(this.shortenText("## This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
+                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time). ##  \n"));
 
             messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
@@ -553,7 +553,7 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
-        messages.push(`There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams:  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams: ##  \n`);
 
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
