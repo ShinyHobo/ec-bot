@@ -919,11 +919,14 @@ export abstract class Roadmap {
             gantts.push(newGantt.join(''));
         });
 
-        let timelines = [];
+        let timelines = `<ul>`;
         matchMergedSchedules.forEach((ms, msi) => {
-            timelines.push(`* ${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
+            timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}</li>`;
         });
-        return `<details><summary>${team.title.trim()}  \n${timelines.join('')}</summary><p>${gantts.join('<br>')}</p></details>`;
+        timelines += `</ul>`;
+        
+
+        return `<details><summary>${team.title.trim()} ${timelines} \n</summary><p>${gantts.join('<br>')}</p></details>`;
     }
 
     /**
