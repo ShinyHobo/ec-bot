@@ -559,15 +559,9 @@ export abstract class Roadmap {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-            messages.push(`  \n**${match.title.trim()}** [${match.project_ids.replace(',', ', ')}]  \n`);
+            messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
             teams.forEach(mt => {
-                const uniqueSchedules = _.uniqBy(mt.timeAllocations, (time) => [time.startDate, time.endDate].join());
-                const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
-                const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-                messages.push(this.shortenText(this.generateGanttChart(mt.title, mergedSchedules, compareTime)));
-                matchMergedSchedules.forEach((ms, msi) => {
-                    messages.push(`* ${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
-                });
+                messages.push(this.shortenText(this.generateGanttChart(mt, compareTime)));
             });
         });
 
@@ -884,16 +878,19 @@ export abstract class Roadmap {
 
     /**
      * Generates a text based gantt chart displaying weeks
-     * @param team The team name
-     * @param schedules The schedules to chart
+     * @param team The team
      * @param compareTime The time to generate the chart around (yearly)
      * @returns A text based, collapsible gantt chart text block
      */
-     private static generateGanttChart(team: string, schedules, compareTime): string {
+     private static generateGanttChart(team: any, compareTime): string {
+        const uniqueSchedules = _.uniqBy(team.timeAllocations, (time) => [time.startDate, time.endDate].join());
+        const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
+        const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+
         let gantts = [];
         let time = new Date(compareTime);
         let firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
-        schedules.forEach((s) => {
+        mergedSchedules.forEach((s) => {
             let newGantt = new Array(52).fill('..');
             let start  = new Date(s.startDate);
             start = start < firstOfYear ? firstOfYear : start;
@@ -921,7 +918,12 @@ export abstract class Roadmap {
             }
             gantts.push(newGantt.join(''));
         });
-        return `<details><summary>${team}</summary><p>${gantts.join('<br>')}</p></details>`;
+
+        let timelines = [];
+        matchMergedSchedules.forEach((ms, msi) => {
+            timelines.push(`* ${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
+        });
+        return `<details><summary>${team.title.trim()}  \n${timelines.join('')}</summary><p>${gantts.join('<br>')}</p></details>`;
     }
 
     /**
