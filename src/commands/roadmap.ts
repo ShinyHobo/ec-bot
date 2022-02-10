@@ -565,8 +565,8 @@ export abstract class Roadmap {
                 const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
                 const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
                 messages.push(this.shortenText(this.generateGanttChart(mt.title, mergedSchedules, compareTime)));
-                matchMergedSchedules.sort((a,b) => a.endDate - b.endDate).forEach((ms, msi) => {
-                    messages.push(`* ${matchMergedSchedules.length>1?` #${msi}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
+                matchMergedSchedules.forEach((ms, msi) => {
+                    messages.push(`* ${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
                 });
             });
         });
@@ -904,10 +904,18 @@ export abstract class Roadmap {
             const startWeek = this.getWeek(start, firstOfYear);
             const endWeek = this.getWeek(end, firstOfYear);
             const thisWeek = this.getWeek(time, firstOfYear);
-            let period = new Array(endWeek + 1 - startWeek).fill('==');
+            let fill = '==';
+            if(s.partialTime) {
+                fill = '~~';
+            }
+            let period = new Array(endWeek + 1 - startWeek).fill(fill);
             newGantt.splice(startWeek - 1, period.length, ...period);
             if(startWeek <= thisWeek && thisWeek <= endWeek) {
-                newGantt.splice(thisWeek - 1, 1, '=|');
+                if(s.partialTime) {
+                    newGantt.splice(thisWeek - 1, 1, '~|');
+                } else {
+                    newGantt.splice(thisWeek - 1, 1, '=|');
+                }
             } else {
                 newGantt.splice(thisWeek - 1, 1, '.|');
             }
