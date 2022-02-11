@@ -370,14 +370,18 @@ export abstract class Roadmap {
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
-            messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:  \n`);
+            messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
             removedDeliverables.forEach(d => {
                 const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
-                messages.push(he.unescape(`* **${d.title.trim()}**  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
 
-                // TODO - Add which teams and how many devs have been freed up
+                // TODO - Add how many devs have been freed up, and their departments
+                if(dMatch.teams) {
+                    const freedTeams = dMatch.teams.map(t => t.title);
+                    messages.push(this.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
+                }
 
                 messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 // removed deliverable implies associated time allocations were removed; no description necessary
@@ -388,7 +392,7 @@ export abstract class Roadmap {
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
         if(newDeliverables.length) {
-            messages.push(`[${newDeliverables.length}] deliverable(s) *added*:  \n`);
+            messages.push(`## [${newDeliverables.length}] deliverable(s) *added*: ##  \n`);
             newDeliverables.forEach(d => {
                 const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
                 if(dMatch) {
@@ -396,9 +400,20 @@ export abstract class Roadmap {
                 }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`\* **${d.title.trim()}**  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
+
+                if(d.teams) {
+                    messages.push(`The following team(s) were assigned:  \n`);
+                    d.teams.forEach(t => {
+                        const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
+                        const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
+                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+                    });
+                    messages.push('  \n');
+                }
+
                 messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 changes.added++;
 
@@ -419,7 +434,7 @@ export abstract class Roadmap {
 
                     if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `**${title.trim()}**  \n`;
+                        let update = `### **${title.trim()}** ###  \n`;
                         update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
 
                         if(dChanges.some(p => p.change === 'startDate')) {
@@ -480,7 +495,7 @@ export abstract class Roadmap {
                     }
                 }
             });
-            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:  \n`);
+            messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
             messages = messages.concat(updatedMessages);
             messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*  \n\n`);
             
