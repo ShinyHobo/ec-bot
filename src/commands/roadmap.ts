@@ -597,7 +597,8 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
-        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams: ##  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push("---  \n");
 
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
