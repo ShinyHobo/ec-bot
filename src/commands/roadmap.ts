@@ -528,7 +528,7 @@ export abstract class Roadmap {
             });
             messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
             messages = messages.concat(updatedMessages);
-            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*  \n\n`);
+            messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
             
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
