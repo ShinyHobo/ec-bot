@@ -482,12 +482,6 @@ export abstract class Roadmap {
             
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
-            
-            messages.push('---  \n\n');
-            messages.push(this.shortenText("## This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
-                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time). ##  \n"));
-
-            messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
 
         this.sendTextMessageFile(messages, `progress_tracker_${end}.md`, msg);
