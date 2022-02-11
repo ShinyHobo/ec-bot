@@ -372,10 +372,14 @@ export abstract class Roadmap {
         if(removedDeliverables.length) {
             messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:  \n`);
             removedDeliverables.forEach(d => {
+                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
                 messages.push(he.unescape(`* **${d.title.trim()}**  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-                messages = [...messages, ...this.generateCardImage(d)];
+
+                // TODO - Add which teams and how many devs have been freed up
+
+                messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
             });
@@ -395,7 +399,7 @@ export abstract class Roadmap {
                 messages.push(he.unescape(`\* **${d.title.trim()}**  \n`.toString()));
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-                messages = [...messages, ...this.generateCardImage(d)];
+                messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 changes.added++;
 
                 // TODO - cards, teams, time allocations
@@ -461,7 +465,7 @@ export abstract class Roadmap {
                         }
                         updatedMessages.push(he.unescape(update + '  \n'));
                         updatedDeliverables.push(f);
-                        updatedMessages = [...updatedMessages, ...this.generateCardImage(l)];
+                        updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f)];
                         changes.updated++;
                     }
 
@@ -926,11 +930,23 @@ export abstract class Roadmap {
     /**
      * Generates a markdown card image for display. Github size limit for images is 5 MB
      * @param deliverable The deliverable to display a card image for
+     * @param oldDeliverable The previous deliverable to check for deltas against
      * @returns The image messages
      */
-    private static generateCardImage(deliverable: any): string[] {
+    private static generateCardImage(deliverable: any, oldDeliverable: any): string[] {
         const messages = [];
         if(deliverable.card) {
+            if(oldDeliverable.card) {
+                const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
+                if(d.length) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const changesToDetect = ['title','description', 'category', 'release_title'];
+                    dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
+                        messages.push(`* Release ${_.capitalize(dc.change)} has been changed from ${oldDeliverable[dc.change]} to ${deliverable[dc.change]}  \n`);
+                    });
+                }
+            }
+
             const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
             messages.push(`![](${cardImage})  \n`);
             messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
