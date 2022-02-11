@@ -908,7 +908,7 @@ export abstract class Roadmap {
             });
         });
 
-        return dbDeliverables;
+        return _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']);
     };
 
     /**
