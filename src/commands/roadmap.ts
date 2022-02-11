@@ -400,7 +400,7 @@ export abstract class Roadmap {
                 }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
 
@@ -416,8 +416,6 @@ export abstract class Roadmap {
 
                 messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 changes.added++;
-
-                // TODO - cards, teams, time allocations
             });
             messages.push('---  \n\n');
         }
