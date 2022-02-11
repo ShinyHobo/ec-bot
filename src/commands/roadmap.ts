@@ -429,7 +429,7 @@ export abstract class Roadmap {
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    const dChangesToDetect = ['endDate','startDate', 'title', 'description'];
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
                     
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
@@ -478,6 +478,32 @@ export abstract class Roadmap {
                             update += this.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
                         }
 
+                        if(dChanges.some(p => p.change === 'teams')) {
+                            const teamChangesToDetect = ['startDate', 'endDate'];
+                            l.teams.forEach(lt => {
+                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
+                                if(teamMatch) {
+                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
+                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
+                                        
+                                    if(tChanges.length) {
+                                        const lDiff = lt.endDate - lt.startDate;
+                                        const tmDiff = teamMatch.endDate - teamMatch.startDate;
+                                        const timeDiff = lDiff - tmDiff; // positive is more work
+                                        const dayDiff = Math.round(Math.abs(timeDiff) / (60*60*24*1000));
+    
+                                        if(dayDiff) {
+                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                        }
+                                    }
+                                } else {
+                                    // new team? -> Added time
+                                    // deleted team? -> Freed time
+                                    const sner = "";
+                                }
+                            });
+                        }
+
                         updatedMessages.push(he.unescape(update + '  \n'));
                         
                         if(f.card && !l.card) {
@@ -488,25 +514,6 @@ export abstract class Roadmap {
                         
                         updatedDeliverables.push(f);
                         changes.updated++;
-                    }
-
-                    if(dChanges.some(p => p.change === 'teams')) {
-                        const teamChanges = dChanges.find(p => p.change === 'teams');
-                        const teamChangesToDetect = ['startDate', 'endDate'];
-                        teamChanges.val.forEach(t => {
-                            messages.push(`* ${_.capitalize(t.change)} has been changed from ${f[t.change]} to ${l[t.change]}  \n`);
-                        });
-                        //     const tChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                        //     const changesToDetect = ['title','description', 'category', 'release_title'];
-                        //     tChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
-                        //          messages.push(`* ${_.capitalize(dc.change)} has been changed from ${f[dc.change]} to ${l[dc.change]}  \n`);
-                        //     });
-
-                        // 0:'teams'
-                        // 1:0
-                        // 2:'timeAllocations'
-                        // 3:4
-                        // 4:'deliverable_id'
                     }
                 }
             });
