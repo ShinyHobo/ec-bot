@@ -62,6 +62,12 @@ export default abstract class Migration {
                 "team_id INTEGER,"+
                 "deliverable_id INTEGER,"+
                 "PRIMARY KEY(id AUTOINCREMENT))").run();
+
+            // Fix dates in team_diff table
+            const teamsWithWrongDates = db.prepare("SELECT id, startDate, endDate FROM team_diff WHERE startDate LIKE '%+0000' OR endDate LIKE '%+0000'").all();
+            teamsWithWrongDates.forEach(t => {
+                db.prepare(`UPDATE team_diff SET startDate = ${Date.parse(t.startDate)}, endDate = ${Date.parse(t.endDate)} WHERE id = ${t.id}`).run();
+            });
         });
 
         migrate();

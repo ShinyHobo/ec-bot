@@ -429,8 +429,9 @@ export abstract class Roadmap {
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-
-                    if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description'];
+                    
+                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                         let update = `### **${title.trim()}** ###  \n`;
                         update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
@@ -476,15 +477,31 @@ export abstract class Roadmap {
                         if(dChanges.some(p => p.change === 'description')) {
                             update += this.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
                         }
+
                         updatedMessages.push(he.unescape(update + '  \n'));
+                        
+                        if(f.card && !l.card) {
+                            updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
+                        } else if(l.card) {
+                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f)];
+                        }
+                        
                         updatedDeliverables.push(f);
-                        updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f)];
                         changes.updated++;
                     }
 
-                    // TODO - cards, teams, time allocations
                     if(dChanges.some(p => p.change === 'teams')) {
-                        
+                        const teamChanges = dChanges.find(p => p.change === 'teams');
+                        const teamChangesToDetect = ['startDate', 'endDate'];
+                        teamChanges.val.forEach(t => {
+                            messages.push(`* ${_.capitalize(t.change)} has been changed from ${f[t.change]} to ${l[t.change]}  \n`);
+                        });
+                        //     const tChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                        //     const changesToDetect = ['title','description', 'category', 'release_title'];
+                        //     tChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
+                        //          messages.push(`* ${_.capitalize(dc.change)} has been changed from ${f[dc.change]} to ${l[dc.change]}  \n`);
+                        //     });
+
                         // 0:'teams'
                         // 1:0
                         // 2:'timeAllocations'
@@ -619,7 +636,7 @@ export abstract class Roadmap {
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
                     let teamId = null;
                     if(tDiff.length || !match) { // new or changed
-                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, Date.parse(dt.startDate), Date.parse(dt.endDate), now, dt.numberOfDeliverables, dt.slug]);
                         teamId = teamRow.lastInsertRowid;
                         if(justIds) {
                             rTeams.push(teamId);
@@ -941,7 +958,7 @@ export abstract class Roadmap {
     }
 
     /**
-     * Generates a markdown card image for display. Github size limit for images is 5 MB
+     * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
      * @param deliverable The deliverable to display a card image for
      * @param oldDeliverable The previous deliverable to check for deltas against
      * @returns The image messages
