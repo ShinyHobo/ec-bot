@@ -480,28 +480,37 @@ export abstract class Roadmap {
 
                         if(dChanges.some(p => p.change === 'teams')) {
                             const teamChangesToDetect = ['startDate', 'endDate'];
-                            l.teams.forEach(lt => {
+                            l.teams.forEach(lt => { // added/modified
+                                const lDiff = lt.endDate - lt.startDate;
                                 const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
                                 if(teamMatch) {
                                     const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
                                     const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
                                         
                                     if(tChanges.length) {
-                                        const lDiff = lt.endDate - lt.startDate;
                                         const tmDiff = teamMatch.endDate - teamMatch.startDate;
                                         const timeDiff = lDiff - tmDiff; // positive is more work
-                                        const dayDiff = Math.round(Math.abs(timeDiff) / (60*60*24*1000));
+                                        const dayDiff = this.convertMillisecondsToDays(timeDiff);
     
                                         if(dayDiff) {
                                             update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
                                         }
                                     }
                                 } else {
-                                    // new team? -> Added time
-                                    // deleted team? -> Freed time
-                                    const sner = "";
+                                    const dayDiff = this.convertMillisecondsToDays(lDiff);
+                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
                                 }
                             });
+
+                            // removed teams
+                            if(f.teams) {
+                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
+                                removedTeams.forEach(rt => {
+                                    const rtDiff = rt.endDate - rt.startDate;
+                                    const dayDiff = this.convertMillisecondsToDays(rtDiff);
+                                    update += `* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`;
+                                });
+                            }
                         }
 
                         updatedMessages.push(he.unescape(update + '  \n'));
@@ -817,6 +826,15 @@ export abstract class Roadmap {
         const month = +date.substring(4, 6);
         const day = +date.substring(6, 8);
         return new Date(year, month - 1, day).getTime();
+    }
+
+    /**
+     * Converts milliseconds to the closest whole number
+     * @param ms The time value to convert
+     * @returns The absolute number of days, rounded to the nearest integer
+     */
+    private static convertMillisecondsToDays(ms: number): number {
+        return Math.round(Math.abs(ms) / (60*60*24*1000));
     }
 
     /**
