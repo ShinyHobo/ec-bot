@@ -370,12 +370,20 @@ export abstract class Roadmap {
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
-            messages.push(`[${removedDeliverables.length}] deliverable(s) *removed*:  \n`);
+            messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
             removedDeliverables.forEach(d => {
-                messages.push(he.unescape(`* **${d.title.trim()}**  \n`.toString()));
+                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
+                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-                messages = [...messages, ...this.generateCardImage(d)];
+
+                // TODO - Add how many devs have been freed up, and their departments
+                if(dMatch.teams) {
+                    const freedTeams = dMatch.teams.map(t => t.title);
+                    messages.push(this.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
+                }
+
+                messages = [...messages, ...this.generateCardImage(d, dMatch)];
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
             });
@@ -384,7 +392,7 @@ export abstract class Roadmap {
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
         if(newDeliverables.length) {
-            messages.push(`[${newDeliverables.length}] deliverable(s) *added*:  \n`);
+            messages.push(`## [${newDeliverables.length}] deliverable(s) *added*: ##  \n`);
             newDeliverables.forEach(d => {
                 const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
                 if(dMatch) {
@@ -392,13 +400,22 @@ export abstract class Roadmap {
                 }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`\* **${d.title.trim()}**  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-                messages = [...messages, ...this.generateCardImage(d)];
-                changes.added++;
 
-                // TODO - cards, teams, time allocations
+                if(d.teams) {
+                    messages.push(`The following team(s) were assigned:  \n`);
+                    d.teams.forEach(t => {
+                        const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
+                        const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
+                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+                    });
+                    messages.push('  \n');
+                }
+
+                messages = [...messages, ...this.generateCardImage(d, dMatch)];
+                changes.added++;
             });
             messages.push('---  \n\n');
         }
@@ -412,10 +429,11 @@ export abstract class Roadmap {
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-
-                    if(dChanges.some(p => p.change === 'endDate' || p.change === 'startDate' || p.change === 'title' || p.change === 'description')) {
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+                    
+                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `**${title.trim()}**  \n`;
+                        let update = `### **${title.trim()}** ###  \n`;
                         update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
 
                         if(dChanges.some(p => p.change === 'startDate')) {
@@ -459,35 +477,61 @@ export abstract class Roadmap {
                         if(dChanges.some(p => p.change === 'description')) {
                             update += this.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
                         }
-                        updatedMessages.push(he.unescape(update + '  \n'));
-                        updatedDeliverables.push(f);
-                        updatedMessages = [...updatedMessages, ...this.generateCardImage(l)];
-                        changes.updated++;
-                    }
 
-                    // TODO - cards, teams, time allocations
-                    if(dChanges.some(p => p.change === 'teams')) {
+                        if(dChanges.some(p => p.change === 'teams')) {
+                            const teamChangesToDetect = ['startDate', 'endDate'];
+                            l.teams.forEach(lt => { // added/modified
+                                const lDiff = lt.endDate - lt.startDate;
+                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
+                                if(teamMatch) {
+                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
+                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
+                                        
+                                    if(tChanges.length) {
+                                        const tmDiff = teamMatch.endDate - teamMatch.startDate;
+                                        const timeDiff = lDiff - tmDiff; // positive is more work
+                                        const dayDiff = this.convertMillisecondsToDays(timeDiff);
+    
+                                        if(dayDiff) {
+                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                        }
+                                    }
+                                } else {
+                                    const dayDiff = this.convertMillisecondsToDays(lDiff);
+                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
+                                }
+                            });
+
+                            // removed teams
+                            if(f.teams) {
+                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
+                                removedTeams.forEach(rt => {
+                                    const rtDiff = rt.endDate - rt.startDate;
+                                    const dayDiff = this.convertMillisecondsToDays(rtDiff);
+                                    update += `* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`;
+                                });
+                            }
+                        }
+
+                        updatedMessages.push(he.unescape(update + '  \n'));
                         
-                        // 0:'teams'
-                        // 1:0
-                        // 2:'timeAllocations'
-                        // 3:4
-                        // 4:'deliverable_id'
+                        if(f.card && !l.card) {
+                            updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
+                        } else if(l.card) {
+                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f)];
+                        }
+                        
+                        updatedDeliverables.push(f);
+                        changes.updated++;
                     }
                 }
             });
-            messages.push(`[${updatedDeliverables.length}] deliverable(s) *updated*:  \n`);
+            messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
             messages = messages.concat(updatedMessages);
-            messages.push(`[${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged*  \n\n`);
+            messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
             
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
-            
-            messages.push('---  \n\n');
-            messages.push(this.shortenText("## This section lists all currently scheduled deliverable time allocations. Any given item is assigned to either Star Citizen (SC), "+
-                "Squadron 42 (SQ42), or both, and the teams that work on each deliverable can be split between many tasks (marked with {PT} for part time). ##  \n"));
-
-            messages = [...messages, ...this.generateTeamSprintReport(compareTime, last, db)];
         }
 
         this.sendTextMessageFile(messages, `progress_tracker_${end}.md`, msg);
@@ -553,7 +597,7 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
-        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being done by ${teamTasks.length} teams: ##  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams: ##  \n`);
 
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
@@ -608,7 +652,7 @@ export abstract class Roadmap {
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
                     let teamId = null;
                     if(tDiff.length || !match) { // new or changed
-                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, dt.startDate, dt.endDate, now, dt.numberOfDeliverables, dt.slug]);
+                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, Date.parse(dt.startDate), Date.parse(dt.endDate), now, dt.numberOfDeliverables, dt.slug]);
                         teamId = teamRow.lastInsertRowid;
                         if(justIds) {
                             rTeams.push(teamId);
@@ -785,6 +829,15 @@ export abstract class Roadmap {
     }
 
     /**
+     * Converts milliseconds to the closest whole number
+     * @param ms The time value to convert
+     * @returns The absolute number of days, rounded to the nearest integer
+     */
+    private static convertMillisecondsToDays(ms: number): number {
+        return Math.round(Math.abs(ms) / (60*60*24*1000));
+    }
+
+    /**
      * Gets the week for the given date
      * @param date The date to get the week of
      * @param firstOfYear The first day of the year
@@ -873,7 +926,7 @@ export abstract class Roadmap {
             });
         });
 
-        return dbDeliverables;
+        return _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']);
     };
 
     /**
@@ -930,13 +983,25 @@ export abstract class Roadmap {
     }
 
     /**
-     * Generates a markdown card image for display. Github size limit for images is 5 MB
+     * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
      * @param deliverable The deliverable to display a card image for
+     * @param oldDeliverable The previous deliverable to check for deltas against
      * @returns The image messages
      */
-    private static generateCardImage(deliverable: any): string[] {
+    private static generateCardImage(deliverable: any, oldDeliverable: any): string[] {
         const messages = [];
         if(deliverable.card) {
+            if(oldDeliverable.card) {
+                const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
+                if(d.length) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const changesToDetect = ['title','description', 'category', 'release_title'];
+                    dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
+                        messages.push(`* Release ${_.capitalize(dc.change)} has been changed from ${oldDeliverable[dc.change]} to ${deliverable[dc.change]}  \n`);
+                    });
+                }
+            }
+
             const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
             messages.push(`![](${cardImage})  \n`);
             messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
