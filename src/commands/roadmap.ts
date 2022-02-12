@@ -1,11 +1,12 @@
-import { Message, Util, MessageAttachment } from 'discord.js';
+import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
-import * as https from 'https';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
 import * as _ from 'lodash';
 import * as fs from 'fs';
 import * as path from 'path';
+import GeneralHelpers from '../services/general-helpers';
+import RSINetwork from '../services/rsi-network';
 
 /**
  * Bot commands for analyzing the RSI roadmap and progress tracker
@@ -26,61 +27,6 @@ export abstract class Roadmap {
     //#endregion
 
     //#region Private properies
-    /** Graphql query for retrieving the list of deliverables from the RSI progress tracker page */
-    private static readonly deliverablesGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'deliverables.graphql'), 'utf-8');
-
-    /** Graphql query for retrieving the list of teams and time allocations from the RSI progress tracker page */
-    private static readonly teamsGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8');
-
-    /** The available search pattens for the graphql queries */
-    private static readonly SortByEnum = Object.freeze({
-        ALPHABETICAL: "ALPHABETICAL",
-        CHRONOLOGICAL: "CHRONOLOGICAL"
-    });
-
-    /** The available category ids for the graphql queries */
-    private static readonly CategoryEnum = Object.freeze({
-        CoreTech: 1,
-        Gameplay: 2,
-        Characters: 3,
-        Locations: 4,
-        AI: 5,
-        ShipsAndVehicles: 6,
-        WeaponsAndItems: 7
-    });
-
-    /** The available query types */
-    private static readonly QueryTypeEnum = Object.freeze({
-        Deliverables: 1,
-        Teams: 2
-    });
-
-    /** The available project types for the graphql queries */
-    private static readonly ProjectEnum = Object.freeze({
-        SQ42: "el2codyca4mnx",
-        SC: "ekm24a6ywr3o3"
-    });
-
-    /** The available project images */
-    private static readonly ProjectImages = Object.freeze({
-       SQ42: "/media/b9ka4ohfxyb1kr/source/StarCitizen_Square_LargeTrademark_White_Transparent.png",
-       SC: "/media/z2vo2a613vja6r/source/Squadron42_White_Reserved_Transparent.png" 
-    });
-
-    /** RSI hostname */
-    private static readonly rsi = 'robertsspaceindustries.com';
-
-    /** The base query options for pulling down graphql results */
-    private static readonly options = {
-        hostname: this.rsi,
-        path: '/graphql',
-        method: 'POST',
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-    };
-
     /** The report category enum */
     private static readonly ReportCategoryEnum = Object.freeze({
         Delta: "Delta",
@@ -106,7 +52,7 @@ export abstract class Roadmap {
                 this.delta(msg, db);
                 break;
             case 'compare':
-                this.compare(args, msg, db);
+                this.generateProgressReportDelta(args, msg, db);
                 break;
             case 'teams':
                 // TODO - Add args to replace -t if available
@@ -116,110 +62,6 @@ export abstract class Roadmap {
                 msg.channel.send(this.usage).catch(console.error);
                 break;
         }
-    }
-
-    /**
-     * Gets data from RSI
-     * @param data The graphql query
-     * @param type The grpahql query type
-     * @returns The response promise
-     */
-    private static async getResponse(data: string, type: number): Promise<any> {
-        return await new Promise((resolve, reject) => {
-            const req = https.request(this.options, (res) => {
-              let data = '';
-
-              res.on('data', (d) => {
-                data += d;
-              });
-              res.on('end', () => {
-                if(data[0] === '<') {
-                    console.log(data);
-                    reject('Server error');
-                }
-                switch(type){
-                    case 1: // Deliverables
-                        resolve(JSON.parse(data).data.progressTracker.deliverables);
-                        break;
-                    case 2: // Teams
-                        resolve(JSON.parse(data).data.progressTracker.teams);
-                        break;
-                    default:
-                        reject(`Invalid response query type ${type}`);
-                        break;
-                }
-              });
-            });
-
-            req.on('error', (error) => {
-              reject(error);
-            });
-
-            req.on('timeout', () => {
-                req.destroy();
-                reject('timed out');
-            });
-
-            req.write(data);
-            req.end();
-        });
-    }
-
-    /**
-     * Generates a graphql query for retrieving deliverables data from RSI
-     * @param offset The offset
-     * @param limit The limit (max 20)
-     * @param sortBy SortByEnum sort type
-     * @param projectSlugs The projects to limit the search to
-     * @param categoryIds The categories to limit the search to
-     * @returns The query
-     */
-    private static deliverablesQuery(offset: number =0, limit: number=20, sortBy:string=this.SortByEnum.ALPHABETICAL, projectSlugs:any[]=[], categoryIds:any[]=[]): string {
-        let query: any = {
-            operationName: "deliverables",
-            query: this.deliverablesGraphql,
-            variables: {
-                "startDate": "2020-01-01",
-                "endDate": "2023-12-31",
-                "limit": limit,
-                "offset": offset,
-                "sortBy": `${sortBy}`
-            }
-        };
-
-        if(projectSlugs.length) {
-            query.projectSlugs = JSON.stringify(projectSlugs);
-        }
-
-        if(categoryIds.length) {
-            query.categoryIds = JSON.stringify(categoryIds);
-        }
-
-        return JSON.stringify(query);
-    }
-
-    /**
-     * Generates a graphql query for retrieving deliverables data from RSI
-     * @param offset The offset
-     * @param deliverableSlug The deliverable slug to limit the search by
-     * @param sortBy SortByEnum sort type
-     * @returns The query
-     */
-    private static teamsQuery(offset: number =0, deliverableSlug: string, sortBy=this.SortByEnum.ALPHABETICAL) {
-        let query: any = {
-            operationName: "teams",
-            query: this.teamsGraphql,
-            variables: {
-                "startDate": "2020-01-01",
-                "endDate": "2050-12-31",
-                "limit": 20,
-                "offset": offset,
-                "sortBy": `${sortBy}`,
-                "deliverableSlug": deliverableSlug,
-            }
-        };
-
-        return JSON.stringify(query);
     }
 
     /**
@@ -234,13 +76,13 @@ export abstract class Roadmap {
         let offset = 0;
         //const sortBy = 'd' in argv ? this.SortByEnum.CHRONOLOGICAL : this.SortByEnum.ALPHABETICAL;
         let completedQuery = true;
-        const initialResponse = await this.getResponse(this.deliverablesQuery(offset, 1), this.QueryTypeEnum.Deliverables).catch((e) => {
+        const initialResponse = await RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 1), RSINetwork.QueryTypeEnum.Deliverables).catch((e) => {
             completedQuery = false;
         }); // just needed for the total count; could speed up by only grabbing this info and not the rest of the metadata
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(this.getResponse(this.deliverablesQuery(offset, 20), this.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 20), RSINetwork.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -257,7 +99,7 @@ export abstract class Roadmap {
 
             // download and attach development team time assignments to each deliverable
             deliverables.forEach((d) => {
-                teamPromises.push(this.getResponse(this.teamsQuery(offset, d.slug), this.QueryTypeEnum.Teams).catch(() => completedQuery = false));
+                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
@@ -282,7 +124,7 @@ export abstract class Roadmap {
                     const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
                     fs.readdirSync(initializationDataDir).forEach((file) => {
                         const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        this.insertChanges(db, this.convertDateToTime(file), this.adjustData(data));
+                        this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
                     });
                 }
 
@@ -300,372 +142,6 @@ export abstract class Roadmap {
 
             }).catch(console.error);
         }).catch(console.error);
-    }
-
-    /**
-     * Adjusts the data for delta storage
-     * @param deliverables The deliverables list to adjust
-     * @returns The adjusted data
-     */
-    private static adjustData(deliverables: any[]): any[] { // adjust the deliverable object for db insertion
-        deliverables.forEach((d)=>{
-            d.startDate = Date.parse(d.startDate);
-            d.endDate = Date.parse(d.endDate);
-            d.updateDate = Date.parse(d.updateDate);
-            if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
-                d.card.updateDate = Date.parse(d.card.updateDate);
-                delete(d.card.id);
-            }
-            if(d.teams) {
-                d.teams.forEach((team) => {
-                    if(team.timeAllocations) {
-                        team.timeAllocations.forEach((ta) => {
-                            ta.startDate = Date.parse(ta.startDate);
-                            ta.endDate = Date.parse(ta.endDate);
-                        });
-                    }
-                });
-            }
-        });
-        return deliverables;
-    }
-
-    /**
-     * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
-     * @param argv The available arguments [TODO]
-     * @param msg The command message
-     * @param db The database connection
-     */
-    private static async compare(argv: Array<string>, msg: Message, db: Database) {
-        let start: number = null;
-        let end: number = null;
-
-        const args = require('minimist')(argv.slice(1));
-
-        // select closest existing date prior to or on entered date
-        if(args['e'] && args['e'] !== true) {
-            if(Number(args['e'])) {
-                const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['e'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
-                end = dbEnd && dbEnd.addedDate;
-            }
-        } else {
-            const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
-            end = dbEnd && dbEnd.addedDate;
-        }
-
-        if(args['s'] && args['s'] !== true) {
-            if(Number(args['s'])) {
-                const dbStart = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${this.convertDateToTime(args['s'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
-                start = dbStart && dbStart.addedDate;
-            }
-        } else {
-            // determine date immediately before end
-            const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
-            start = dbStart && dbStart.addedDate;
-        }
-        
-        if(!start || !end || start >= end ) {
-            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
-        }
-
-        msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
-
-        const first = this.buildDeliverables(start, db, true);
-        const last = this.buildDeliverables(end, db, true);
-        const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
-
-        let messages = [];
-        const compareTime = Date.now();
-        let changes = {added: 0, removed: 0, updated: 0, readded: 0};
-
-        messages.push(`# Progress Report Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
-        messages.push('---  \n\n');
-
-        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
-        if(removedDeliverables.length) {
-            messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
-            removedDeliverables.forEach(d => {
-                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
-                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
-                messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
-                messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-
-                // TODO - Add how many devs have been freed up, and their departments
-                if(dMatch.teams) {
-                    const freedTeams = dMatch.teams.map(t => t.title);
-                    messages.push(this.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
-                }
-
-                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
-                // removed deliverable implies associated time allocations were removed; no description necessary
-                changes.removed++;
-            });
-            messages.push('---  \n\n');
-        }
-
-        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
-        if(newDeliverables.length) {
-            messages.push(`## [${newDeliverables.length}] deliverable(s) *added*: ##  \n`);
-            newDeliverables.forEach(d => {
-                const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
-                if(dMatch) {
-                    changes.readded++;
-                }
-                const start = new Date(d.startDate).toDateString();
-                const end = new Date(d.endDate).toDateString();
-                if(args['publish']) {
-                    messages.push(he.unescape(`### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ###  \n`.toString()));
-                } else {
-                    messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
-                }
-                messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
-                messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
-
-                if(d.teams) {
-                    messages.push(`The following team(s) were assigned:  \n`);
-                    d.teams.forEach(t => {
-                        const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
-                        const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
-                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
-                    });
-                    messages.push('  \n');
-                }
-
-                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
-                changes.added++;
-            });
-            messages.push('---  \n\n');
-        }
-
-        const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid));
-        let updatedDeliverables = [];
-        if(remainingDeliverables.length) {
-            let updatedMessages = [];
-            remainingDeliverables.forEach(f => {
-                const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
-                const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
-                if(d.length && l) {
-                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
-                    
-                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
-                        const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `### **${title.trim()}** ###  \n`;
-
-                        if(args['publish']) {
-                            update = `### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`;
-                        }
-                        
-                        update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
-
-                        if(dChanges.some(p => p.change === 'startDate')) {
-                            const oldDate = new Date(f.startDate);
-                            const oldDateText = oldDate.toDateString();
-                            const newDate = new Date(l.startDate);
-                            const newDateText = newDate.toDateString();
-
-                            let updateText = "";
-                            if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
-                                updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
-                            } else if(newDate < oldDate) {
-                                updateText = "moved closer";
-                            } else if(oldDate < newDate) {
-                                updateText = "pushed back";
-                            }
-
-                            update += `\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
-                        }
-                        if(dChanges.some(p => p.change === 'endDate')) {
-                            const oldDate = new Date(f.endDate);
-                            const oldDateText = oldDate.toDateString();
-                            const newDate = new Date(l.endDate);
-                            const newDateText = newDate.toDateString();
-
-                            let updateText = "";
-                            if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
-                                updateText = "moved earlier (time allocation removal(s) likely)  \n"; // likely team time allocation was removed, but could have finished early
-                            } else if(oldDate < newDate) {
-                                updateText = "been extended";
-                            } else if(newDate < oldDate) {
-                                updateText = "moved closer";
-                            }
-
-                            update += `\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
-                        }
-
-                        if(dChanges.some(p => p.change === 'title')) {
-                            update += this.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`);
-                        }
-                        if(dChanges.some(p => p.change === 'description')) {
-                            update += this.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
-                        }
-
-                        if(dChanges.some(p => p.change === 'teams')) {
-                            const teamChangesToDetect = ['startDate', 'endDate'];
-                            l.teams.forEach(lt => { // added/modified
-                                const lDiff = lt.endDate - lt.startDate;
-                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
-                                if(teamMatch) {
-                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
-                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
-                                        
-                                    if(tChanges.length) {
-                                        const tmDiff = teamMatch.endDate - teamMatch.startDate;
-                                        const timeDiff = lDiff - tmDiff; // positive is more work
-                                        const dayDiff = this.convertMillisecondsToDays(timeDiff);
-    
-                                        if(dayDiff) {
-                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
-                                        }
-                                    }
-                                } else {
-                                    const dayDiff = this.convertMillisecondsToDays(lDiff);
-                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
-                                }
-                            });
-
-                            // removed teams
-                            if(f.teams) {
-                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
-                                removedTeams.forEach(rt => {
-                                    const rtDiff = rt.endDate - rt.startDate;
-                                    const dayDiff = this.convertMillisecondsToDays(rtDiff);
-                                    update += `* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`;
-                                });
-                            }
-                        }
-
-                        updatedMessages.push(he.unescape(update + '  \n'));
-                        
-                        if(f.card && !l.card) {
-                            updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
-                        } else if(l.card) {
-                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
-                        }
-                        
-                        updatedDeliverables.push(f);
-                        changes.updated++;
-                    }
-                }
-            });
-            messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
-            messages = messages.concat(updatedMessages);
-            messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
-            
-            const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
-            messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
-
-            if(args['publish']) {
-                messages = [...this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
-            }
-        }
-
-        this.sendTextMessageFile(messages, `${this.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
-    }
-
-    /**
-     * Looks up raw data for a given time period or date [TODO]
-     * @param argv The available arguments
-     * @param msg The command message
-     * @param db The database connection
-     */
-    private static lookup(argv: Array<string>, msg: Message, db: Database) {
-        const args = require('minimist')(argv);
-        if('t' in args) {
-            let compareTime = null;
-            if(args['t'] === 'teams') {
-                compareTime = Date.now();
-            } else {
-                compareTime = this.convertDateToTime(args['t']);
-            }
-
-            if(Number(compareTime)) {
-                const deliverables = this.buildDeliverables(compareTime, db);
-                const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
-                this.sendTextMessageFile(messages, `${this.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
-            } else {
-                msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
-            }
-        }
-
-        // // only show tasks that complete in the future
-        // if('n' in argv) {
-        //     const now = Date.now();
-        //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
-        // }
-
-        // // only show tasks that have expired or been completed
-        // if('o' in argv) {
-        //     const now = Date.now();
-        //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
-        // }
-
-        // // sort by soonest expiring
-        // if('e' in argv) {
-        //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-        // }
-    }
-
-    /**
-     * Generates a report for the items being worked on at the given time
-     * @param compareTime The time to lookup time allocations with
-     * @param deliverables The list of deliverables to generate the report for
-     * @param db The database connection
-     * @param publish Whether or not to generate the report online display
-     * @returns The report lines array
-     */
-    private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
-        let messages = [];
-        const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
-        const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
-        const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
-        const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
-
-        let deltas = this.getDeliverableDeltaDateList(db);
-        let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
-
-        if(publish) {
-            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
-        }
-
-        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
-        messages.push("---  \n");
-
-        const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
-            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
-        const outroDesc = "Part-time schedules are marked with '{PT}'.";
-        if(publish) {
-            messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
-            `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
-        } else {
-            messages.push(this.shortenText(`${introDesc} ${outroDesc}`));
-        }
-
-        messages.push("---  \n");
-
-        currentTasks.forEach((t) => {
-            const match = deliverables.find(l => l.id === t.did);
-            const schedules = groupedTasks[t.did];
-            const teams = _.orderBy(match.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
-            if(publish) {
-                let projectIcons = '';
-                match.project_ids.split(',').forEach(p => {
-                    projectIcons += `<span><img src="https://${this.rsi}${this.ProjectImages[p]}"/></span>`;
-                });
-                messages.push(`  \n### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${match.slug}" target="_blank">${match.title.trim()}</a>** ${projectIcons} ###  \n`);
-            } else {
-                messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
-            }
-            
-            teams.sort().forEach((mt, i) => {
-                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
-            });
-        });
-
-        return messages;
     }
 
     /** 
@@ -843,26 +319,373 @@ export abstract class Roadmap {
         return insertDeliverables(deliverables);
     }
 
-    //#region Helper methods
     /**
-     * Shortens text to 100 characters per line for discord display
-     * @param text The text to shorten
-     * @returns The shortened text
-     */ 
-    private static shortenText(text): string {
-        return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}  \n`.toString();
-    }
-
-    /**
-     * Sends a long text message to Discord as a markdown file
-     * @param messages The messags to include in the file
-     * @param filename The filename to use
-     * @param msg The command message
+     * Adjusts the data for delta storage
+     * @param deliverables The deliverables list to adjust
+     * @returns The adjusted data
      */
-    private static sendTextMessageFile(messages: string[], filename: string, msg: Message) {
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), filename)]}).catch(console.error);
+    private static adjustData(deliverables: any[]): any[] { // adjust the deliverable object for db insertion
+        deliverables.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+                d.card.updateDate = Date.parse(d.card.updateDate);
+                delete(d.card.id);
+            }
+            if(d.teams) {
+                d.teams.forEach((team) => {
+                    if(team.timeAllocations) {
+                        team.timeAllocations.forEach((ta) => {
+                            ta.startDate = Date.parse(ta.startDate);
+                            ta.endDate = Date.parse(ta.endDate);
+                        });
+                    }
+                });
+            }
+        });
+        return deliverables;
     }
 
+    /**
+     * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
+     * @param argv The available arguments [TODO]
+     * @param msg The command message
+     * @param db The database connection
+     */
+    private static async generateProgressReportDelta(argv: Array<string>, msg: Message, db: Database) {
+        let start: number = null;
+        let end: number = null;
+
+        const args = require('minimist')(argv.slice(1));
+
+        // select closest existing date prior to or on entered date
+        if(args['e'] && args['e'] !== true) {
+            if(Number(args['e'])) {
+                const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['e'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                end = dbEnd && dbEnd.addedDate;
+            }
+        } else {
+            const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+            end = dbEnd && dbEnd.addedDate;
+        }
+
+        if(args['s'] && args['s'] !== true) {
+            if(Number(args['s'])) {
+                const dbStart = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['s'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                start = dbStart && dbStart.addedDate;
+            }
+        } else {
+            // determine date immediately before end
+            const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
+            start = dbStart && dbStart.addedDate;
+        }
+        
+        if(!start || !end || start >= end ) {
+            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+        }
+
+        msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
+
+        const first = this.buildDeliverables(start, db, true);
+        const last = this.buildDeliverables(end, db, true);
+        const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
+
+        let messages = [];
+        const compareTime = Date.now();
+        let changes = {added: 0, removed: 0, updated: 0, readded: 0};
+
+        messages.push(`# Progress Report Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        messages.push('---  \n\n');
+
+        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
+        if(removedDeliverables.length) {
+            messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
+            removedDeliverables.forEach(d => {
+                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
+                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
+                messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
+                messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
+
+                // TODO - Add how many devs have been freed up, and their departments
+                if(dMatch.teams) {
+                    const freedTeams = dMatch.teams.map(t => t.title);
+                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
+                }
+
+                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
+                // removed deliverable implies associated time allocations were removed; no description necessary
+                changes.removed++;
+            });
+            messages.push('---  \n\n');
+        }
+
+        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
+        if(newDeliverables.length) {
+            messages.push(`## [${newDeliverables.length}] deliverable(s) *added*: ##  \n`);
+            newDeliverables.forEach(d => {
+                const dMatch = dbRemovedDeliverables.find((dd) => dd.uuid === d.uuid || (d.title && dd.title === d.title && !d.title.includes("Unannounced")));
+                if(dMatch) {
+                    changes.readded++;
+                }
+                const start = new Date(d.startDate).toDateString();
+                const end = new Date(d.endDate).toDateString();
+                if(args['publish']) {
+                    messages.push(he.unescape(`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                } else {
+                    messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                }
+                messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
+                messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
+
+                if(d.teams) {
+                    messages.push(`The following team(s) were assigned:  \n`);
+                    d.teams.forEach(t => {
+                        const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
+                        const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
+                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+                    });
+                    messages.push('  \n');
+                }
+
+                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
+                changes.added++;
+            });
+            messages.push('---  \n\n');
+        }
+
+        const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid));
+        let updatedDeliverables = [];
+        if(remainingDeliverables.length) {
+            let updatedMessages = [];
+            remainingDeliverables.forEach(f => {
+                const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
+                const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
+                if(d.length && l) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+                    
+                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
+                        const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
+                        let update = `### **${title.trim()}** ###  \n`;
+
+                        if(args['publish']) {
+                            update = `### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`;
+                        }
+                        
+                        update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
+
+                        if(dChanges.some(p => p.change === 'startDate')) {
+                            const oldDate = new Date(f.startDate);
+                            const oldDateText = oldDate.toDateString();
+                            const newDate = new Date(l.startDate);
+                            const newDateText = newDate.toDateString();
+
+                            let updateText = "";
+                            if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
+                                updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
+                            } else if(newDate < oldDate) {
+                                updateText = "moved closer";
+                            } else if(oldDate < newDate) {
+                                updateText = "pushed back";
+                            }
+
+                            update += `\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
+                        }
+                        if(dChanges.some(p => p.change === 'endDate')) {
+                            const oldDate = new Date(f.endDate);
+                            const oldDateText = oldDate.toDateString();
+                            const newDate = new Date(l.endDate);
+                            const newDateText = newDate.toDateString();
+
+                            let updateText = "";
+                            if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
+                                updateText = "moved earlier (time allocation removal(s) likely)  \n"; // likely team time allocation was removed, but could have finished early
+                            } else if(oldDate < newDate) {
+                                updateText = "been extended";
+                            } else if(newDate < oldDate) {
+                                updateText = "moved closer";
+                            }
+
+                            update += `\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
+                        }
+
+                        if(dChanges.some(p => p.change === 'title')) {
+                            update += GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`);
+                        }
+                        if(dChanges.some(p => p.change === 'description')) {
+                            update += GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
+                        }
+
+                        if(dChanges.some(p => p.change === 'teams')) {
+                            const teamChangesToDetect = ['startDate', 'endDate'];
+                            l.teams.forEach(lt => { // added/modified
+                                const lDiff = lt.endDate - lt.startDate;
+                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
+                                if(teamMatch) {
+                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
+                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
+                                        
+                                    if(tChanges.length) {
+                                        const tmDiff = teamMatch.endDate - teamMatch.startDate;
+                                        const timeDiff = lDiff - tmDiff; // positive is more work
+                                        const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
+    
+                                        if(dayDiff) {
+                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                        }
+                                    }
+                                } else {
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
+                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
+                                }
+                            });
+
+                            // removed teams
+                            if(f.teams) {
+                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
+                                removedTeams.forEach(rt => {
+                                    const rtDiff = rt.endDate - rt.startDate;
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(rtDiff);
+                                    update += `* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`;
+                                });
+                            }
+                        }
+
+                        updatedMessages.push(he.unescape(update + '  \n'));
+                        
+                        if(f.card && !l.card) {
+                            updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
+                        } else if(l.card) {
+                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
+                        }
+                        
+                        updatedDeliverables.push(f);
+                        changes.updated++;
+                    }
+                }
+            });
+            messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
+            messages = messages.concat(updatedMessages);
+            messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
+            
+            const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
+            messages.splice(1,0,GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+
+            if(args['publish']) {
+                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
+            }
+        }
+
+        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
+    }
+
+    /**
+     * Looks up raw data for a given time period or date [TODO]
+     * @param argv The available arguments
+     * @param msg The command message
+     * @param db The database connection
+     */
+    private static lookup(argv: Array<string>, msg: Message, db: Database) {
+        const args = require('minimist')(argv);
+        if('t' in args) {
+            let compareTime = null;
+            if(args['t'] === 'teams') {
+                compareTime = Date.now();
+            } else {
+                compareTime = GeneralHelpers.convertDateToTime(args['t']);
+            }
+
+            if(Number(compareTime)) {
+                const deliverables = this.buildDeliverables(compareTime, db);
+                const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
+                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
+            } else {
+                msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
+            }
+        }
+
+        // // only show tasks that complete in the future
+        // if('n' in argv) {
+        //     const now = Date.now();
+        //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() > now);
+        // }
+
+        // // only show tasks that have expired or been completed
+        // if('o' in argv) {
+        //     const now = Date.now();
+        //     deliverables = deliverables.filter(d => new Date(d.endDate).getTime() <= now);
+        // }
+
+        // // sort by soonest expiring
+        // if('e' in argv) {
+        //     deliverables.sort((a,b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime() || new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+        // }
+    }
+
+    /**
+     * Generates a report for the items being worked on at the given time
+     * @param compareTime The time to lookup time allocations with
+     * @param deliverables The list of deliverables to generate the report for
+     * @param db The database connection
+     * @param publish Whether or not to generate the report online display
+     * @returns The report lines array
+     */
+    private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
+        let messages = [];
+        const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
+        const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
+        const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
+        const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
+
+        let deltas = this.getDeliverableDeltaDateList(db);
+        let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
+
+        if(publish) {
+            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
+        }
+
+        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push("---  \n");
+
+        const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
+            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
+        const outroDesc = "Part-time schedules are marked with '{PT}'.";
+        if(publish) {
+            messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
+            `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
+        } else {
+            messages.push(GeneralHelpers.shortenText(`${introDesc} ${outroDesc}`));
+        }
+
+        messages.push("---  \n");
+
+        currentTasks.forEach((t) => {
+            const match = deliverables.find(l => l.id === t.did);
+            const schedules = groupedTasks[t.did];
+            const teams = _.orderBy(match.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
+            if(publish) {
+                let projectIcons = '';
+                match.project_ids.split(',').forEach(p => {
+                    projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
+                });
+                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${match.slug}" target="_blank">${match.title.trim()}</a>** ${projectIcons} ###  \n`);
+            } else {
+                messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
+            }
+            
+            teams.sort().forEach((mt, i) => {
+                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
+            });
+        });
+
+        return messages;
+    }
+
+    //#region Helper methods
     /**
      * Provides the list of available delta update dates
      * @param db The database connection
@@ -870,90 +693,6 @@ export abstract class Roadmap {
      */
     private static getDeliverableDeltaDateList(db: Database): number[] {
         return db.prepare("SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC").all().map(d => d.addedDate);
-    }
-    
-    /**
-     * The YYYYMMDD date to convert
-     * @param date The date to convert
-     * @returns The date as an epoch timestamp in ms
-     */
-    private static convertDateToTime(date: string): number {
-        const year = +date.substring(0, 4);
-        const month = +date.substring(4, 6);
-        const day = +date.substring(6, 8);
-        return new Date(year, month - 1, day).getTime();
-    }
-
-    /**
-     * Converts time in milliseconds to a date string in YYYY-MM-DD format
-     * @param time The time in milliseconds to convert
-     * @returns The date string in YYYY-MM-DD format
-     */
-    private static convertTimeToDate(time: number): string {
-        const date = new Date(time);
-        const year = date.getFullYear();
-        const month = ("0" + (date.getMonth() + 1)).slice(-2);
-        const day = ("0" + date.getDate()).slice(-2);
-        return `${year}-${month}-${day}`;
-    }
-
-    /**
-     * Converts milliseconds to the closest whole number
-     * @param ms The time value to convert
-     * @returns The absolute number of days, rounded to the nearest integer
-     */
-    private static convertMillisecondsToDays(ms: number): number {
-        return Math.round(Math.abs(ms) / (60*60*24*1000));
-    }
-
-    /**
-     * Gets the week for the given date
-     * @param date The date to get the week of
-     * @param firstOfYear The first day of the year
-     * @returns The week of the year
-     */
-    private static getWeek(date: Date, firstOfYear: Date): number { 
-        return Math.ceil((((date.getTime() - firstOfYear.getTime()) / 86400000) + firstOfYear.getDay() + 1) / 7);
-    }
-
-    /**
-     * Merges schedule block date ranges that end and begin on the same day
-     * @param ranges The date ranges to merge
-     * @returns The merged date ranges
-     */
-    private static mergeDateRanges(ranges) {
-        ranges = ranges.sort((a,b) => a[0].startDate - b[0].startDate).map(r => r[0]);
-
-        let returnRanges = [];
-        let currentRange = null;
-        ranges.forEach((r) => {
-            // bypass invalid value
-            if (r.startDate >= r.endDate) {
-                return;
-            }
-            //fill in the first element
-            if (!currentRange) {
-                currentRange = r;
-                return;
-            }
-
-            const currentEndDate = new Date(currentRange.endDate);
-            currentEndDate.setDate(currentEndDate.getDate() + 1);
-            const currentEndTime = currentEndDate.getTime();
-
-            if (currentEndTime != r.startDate) {
-                returnRanges.push(currentRange);
-                currentRange = r;
-            } else if (currentRange.endDate < r.endDate) {
-                currentRange.endDate = r.endDate;
-            }
-        });
-
-        if(currentRange) {
-            returnRanges.push(currentRange);
-        }
-
-        return returnRanges;
     }
 
     /**
@@ -1006,12 +745,12 @@ export abstract class Roadmap {
      * @param publish Whether to generate the waterfall chart or just the details
      * @returns A text based, collapsible waterfall chart text block
      */
-     private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
+    private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
 
         // TODO - Display disciplines here
 
         const uniqueSchedules = _._(team.timeAllocations).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
-        const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
+        const mergedSchedules = GeneralHelpers.mergeDateRanges(uniqueSchedules);
         const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
 
         let waterfalls = [];
@@ -1026,9 +765,9 @@ export abstract class Roadmap {
                 if(end < start) {
                     return;
                 }
-                const startWeek = this.getWeek(start, firstOfYear);
-                const endWeek = this.getWeek(end, firstOfYear);
-                const thisWeek = this.getWeek(time, firstOfYear);
+                const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
+                const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
+                const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
                 const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
                 const period = new Array(endWeek + 1 - startWeek).fill(fill);
                 newWaterfall.splice(startWeek - 1, period.length, ...period);
@@ -1084,7 +823,7 @@ export abstract class Roadmap {
             }
 
             if(publish) {
-                const cardImage = deliverable.card.thumbnail.includes(this.rsi) ? deliverable.card.thumbnail : `https://${this.rsi}${deliverable.card.thumbnail}`;
+                const cardImage = deliverable.card.thumbnail.includes(RSINetwork.rsi) ? deliverable.card.thumbnail : `https://${RSINetwork.rsi}${deliverable.card.thumbnail}`;
                 messages.push(`![](${cardImage})  \n`);
                 messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
             } else {
@@ -1092,16 +831,6 @@ export abstract class Roadmap {
             }
         }
         return messages;
-    }
-
-    /**
-     * Generates YAML frontmatter for use on a Jekyll website
-     * @param date The date the report is for
-     * @param category The category of the post (should be a ReportCategoryEnum)
-     * @returns The YAML frontmatter
-     */
-    private static generateFrontmatter(date: string, category: string, title: string): string[] {
-        return ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
     }
     //#endregion
 }
