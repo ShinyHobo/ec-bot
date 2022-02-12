@@ -293,7 +293,7 @@ export abstract class Roadmap {
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
-            let changes = {added: 0, removed: 0, updated: 0, readded: 0};
+            let changes = {added: 0, removed: 0, updated: 0, readded: 0}; // TODO - keep track of other changes (teams, disciplines, cards, times). Possible that these are sometimes changed without affecting the deliverable
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -309,11 +309,18 @@ export abstract class Roadmap {
             }
 
             if(dbTimeAllocations.length) {
-                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
                 const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
+                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
                 const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
                 removedTimes.forEach((rt) => {
-                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id]);
+                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
+                });
+
+                // disciplines are directly tied to time allocations by their uuid, one to many relationship
+                const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
+                const removedDisciplines = dbDisciplines.filter(f => !dTimes.some(l => l.disciplineUuid === f.uuid) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
+                removedDisciplines.forEach((rd) => {
+                    disciplinesInsert.run([null, rd.title, rd.uuid, now]);
                 });
             }
 
