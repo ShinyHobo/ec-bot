@@ -5,8 +5,12 @@ Discord bot for Enemy Contact
 - !ping: Replies with pong.
 - !verify [RSI USERNAME]: Attempts to verify that Discord account owns RSI user.
 - !renew [on/off]: Turns thread auto renewal on/off.
-- !roadmap [pull/compare] optional:[-s start_time(YYYYMMDD)/-e end_time(YYYYMMDD)]: Pulls down current state of roadmap and compares the most recent pull to the previous.
+- !roadmap pull: Pulls down current state of roadmap and stores the delta
+- !roadmap compare [-s YYYYMMDD -e YYYYMMDD --publish]: Compares the most recent pull to the previous; use optional start (s) and end (e) arguments to compare alternate date sets
+- !roadmap teams [--publish] 
 - !help: Shows all commands
+
+Use --publish for additional markdown
 
 ## Setup
 Add a .env file to the root containing "TOKEN=[BOT TOKEN HERE]"
