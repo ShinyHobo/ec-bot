@@ -585,7 +585,7 @@ export abstract class Roadmap {
             if(Number(compareTime)) {
                 const deliverables = this.buildDeliverables(compareTime, db);
                 const messages = this.generateTeamSprintReport(compareTime, deliverables, db, args['publish']);
-                this.sendTextMessageFile(messages, `${this.convertTimeToDate(compareTime)}-Scheduled-Tasks.md`, msg);
+                this.sendTextMessageFile(messages, `${this.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
@@ -628,10 +628,10 @@ export abstract class Roadmap {
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
         if(publish) {
-            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Tasks");
+            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
         }
 
-        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
         currentTasks.forEach((t) => {
