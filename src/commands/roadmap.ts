@@ -390,7 +390,7 @@ export abstract class Roadmap {
                     messages.push(this.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
                 }
 
-                messages = [...messages, ...this.generateCardImage(d, dMatch)];
+                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
                 // removed deliverable implies associated time allocations were removed; no description necessary
                 changes.removed++;
             });
@@ -421,7 +421,7 @@ export abstract class Roadmap {
                     messages.push('  \n');
                 }
 
-                messages = [...messages, ...this.generateCardImage(d, dMatch)];
+                messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
                 changes.added++;
             });
             messages.push('---  \n\n');
@@ -525,7 +525,7 @@ export abstract class Roadmap {
                         if(f.card && !l.card) {
                             updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
                         } else if(l.card) {
-                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f)];
+                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
                         }
                         
                         updatedDeliverables.push(f);
@@ -1017,9 +1017,10 @@ export abstract class Roadmap {
      * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
      * @param deliverable The deliverable to display a card image for
      * @param oldDeliverable The previous deliverable to check for deltas against
+     * @param publish Whether to generate additional YAML
      * @returns The image messages
      */
-    private static generateCardImage(deliverable: any, oldDeliverable: any): string[] {
+    private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
         const messages = [];
         if(deliverable.card) {
             if(oldDeliverable.card) {
@@ -1033,9 +1034,13 @@ export abstract class Roadmap {
                 }
             }
 
-            const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
-            messages.push(`![](${cardImage})  \n`);
-            messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
+            if(publish) {
+                const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
+                messages.push(`![](${cardImage})  \n`);
+                messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
+            } else {
+                messages.push(`Release ${deliverable.card.release_title}  \n\n`);
+            }
         }
         return messages;
     }
