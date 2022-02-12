@@ -19,16 +19,16 @@ query disciplines($teamSlug: String!, $deliverableSlug: String!, $startDate: Str
 
 fragment Discipline on Discipline {
   title
-  color
+  #color
   uuid
   numberOfMembers
   #__typename
 }
 
 fragment TimeAllocation on TimeAllocation {
-  startDate
-  endDate
+  #startDate
+  #endDate
   uuid
-  partialTime
+  #partialTime
   #__typename
 }
