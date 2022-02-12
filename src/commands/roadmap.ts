@@ -192,7 +192,10 @@ export abstract class Roadmap {
                             ta.startDate = Date.parse(ta.startDate);
                             ta.endDate = Date.parse(ta.endDate);
                             if(ta.discipline) {
-                                delete(ta.discipline.timeAllocations);
+                                ta.numberOfMembers = ta.discipline.numberOfMembers;
+                                ta.disciplineTitle = ta.discipline.title;
+                                ta.disciplineUuid = ta.discipline.uuid;
+                                delete(ta.discipline);
                             }
                         });
                     }
@@ -230,6 +233,8 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
+        const mostRecentDisciplineIds = dbTimeAllocations.map((dd) => dd.discipline_id).toString();
+        let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate) FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid`).all();
 
         // TODO - investigate cleaning up removed deliverables code below, check buildDeliverables()
         const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
@@ -237,9 +242,10 @@ export abstract class Roadmap {
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
 
         const insertTeamsAndTimeAllocations = (teams: any[], justIds: boolean = true): any => {
-            let rTeams = [];
-            let rTimes = [];
+            const rTeams = [];
+            const rTimes = [];
             if(teams) {
+                const disciplineProperties = ['numberOfMembers', 'disciplineTitle', 'disciplineUuid'];
                 teams.forEach((dt) => {
                     const match = dbTeams.find(t => t.slug === dt.slug);
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
@@ -260,12 +266,24 @@ export abstract class Roadmap {
                     // analyze changes to time allocations
                     if(dt.timeAllocations) {
                         dt.timeAllocations.forEach((ta) => {
+                            let disciplineId = null;
                             const taMatch = dbTimeAllocations.find(t => t.uuid === ta.uuid);
                             const taDiff = diff.getDiff(taMatch, ta);
-                            if(taDiff.length || !taMatch) {
-                                rTimes.push({team_id: teamId, ...ta});
+                            const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
+
+                            const diMatch = dbDisciplines.find(di => di.disciplineUuid === ta.disciplineUuid);
+                            if(!diMatch || taChanges.some(tac => disciplineProperties.includes(tac.change && tac.change.toString()))) {
+                                const disciplineRow = disciplinesInsert.run([ta.numberOfMembers, ta.disciplineTitle, ta.disciplineUuid, now]);
+                                disciplineId = disciplineRow.lastInsertRowid;
+                                dbDisciplines.push({id: disciplineId, ...ta}); // filter duplicates
                             } else {
-                                rTimes.push({team_id: teamId, ...taMatch});
+                                disciplineId = diMatch.id;
+                            }
+
+                            if(!taMatch || taDiff.length) {
+                                rTimes.push({team_id: teamId, discipline_id: disciplineId, ...ta});
+                            } else {
+                                rTimes.push({team_id: teamId, discipline_id: disciplineId, ...taMatch});
                             }
                         });
                     }
@@ -369,7 +387,7 @@ export abstract class Roadmap {
                     });
 
                     timeAllocations.forEach((ta) => {
-                         timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did]);
+                         timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did, ta.discipline_id]);
                     });
                 }
 
