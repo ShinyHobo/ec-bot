@@ -75,6 +75,7 @@ export default abstract class Migration {
                 "numberOfMembers INTEGER,"+
                 "title TEXT,"+
                 "uuid TEXT,"+
+                "addedDate INTEGER,"+
                 "PRIMARY KEY(id AUTOINCREMENT));").run();
 
             const disciplineIdExists = db.prepare("SELECT * FROM sqlite_master WHERE type = 'table' AND name = 'timeAllocation_diff' AND sql LIKE '%discipline_id%'").get();

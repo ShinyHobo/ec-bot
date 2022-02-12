@@ -121,8 +121,19 @@ export abstract class Roadmap {
                     if(!completedQuery) {
                         return msg.channel.send(`Roadmap discipline retrieval timed out; please try again later.`).catch(console.error);
                     }
-                    disciplineResults.forEach(discipline => {
-                        const metaDate = discipline.metaData;
+                    disciplineResults.forEach(disciplines => {
+                        disciplines.forEach(discipline => {
+                            // TODO - refactor this; not sure how to just select the matching time allocation at the bottom of the search, but this can't be efficient
+                            const dMatch = deliverables.find(d => d.teams && d.teams.find(t => t.timeAllocations && t.timeAllocations.find(ta => discipline.timeAllocations && discipline.timeAllocations.some(dta => dta.uuid === ta.uuid))));
+                            if(dMatch) {
+                                const team = dMatch.teams.find(t => t.timeAllocations.some(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid)));
+                                const timeAllocations = team.timeAllocations.filter(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid));
+                                timeAllocations.forEach(ta => {
+                                    ta.discipline = discipline;
+                                });
+                            }
+                        });
+                        
                     });
 
                     let delta = Date.now() - start;
@@ -157,6 +168,40 @@ export abstract class Roadmap {
         }).catch(console.error);
     }
 
+    /**
+     * Adjust the deliverable objects for db insertion
+     * @param deliverables The deliverables list to adjust
+     * @returns The adjusted data
+     */
+     private static adjustData(deliverables: any[]): any[] {
+        deliverables.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+                d.card.updateDate = Date.parse(d.card.updateDate);
+                delete(d.card.id);
+            }
+            if(d.teams) {
+                d.teams.forEach((team) => {
+                    if(team.timeAllocations) {
+                        team.timeAllocations.forEach((ta) => {
+                            ta.startDate = Date.parse(ta.startDate);
+                            ta.endDate = Date.parse(ta.endDate);
+                            if(ta.discipline) {
+                                delete(ta.discipline.timeAllocations);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        return deliverables;
+    }
+
     /** 
      * Generate delta entries for each deliverable and their children (teams, time allocations, release card)
      * @param db The database connection 
@@ -165,11 +210,14 @@ export abstract class Roadmap {
      * @returns The changes that were detected (addition, removal, modification)
      */
     private static insertChanges(db: Database, now: number, deliverables: any[]): any {
+        // TODO - Refactor code, use joins where possible
+
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
-        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id) VALUES (?,?,?,?,?,?,?)");
+        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id, discipline_id) VALUES (?,?,?,?,?,?,?,?)");
+        const disciplinesInsert = db.prepare("INSERT INTO discipline_diff (numberOfMembers, title, uuid, addedDate) VALUES (?,?,?,?)");
 
         // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
         let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
@@ -330,37 +378,6 @@ export abstract class Roadmap {
         });
 
         return insertDeliverables(deliverables);
-    }
-
-    /**
-     * Adjust the deliverable objects for db insertion
-     * @param deliverables The deliverables list to adjust
-     * @returns The adjusted data
-     */
-    private static adjustData(deliverables: any[]): any[] {
-        deliverables.forEach((d)=>{
-            d.startDate = Date.parse(d.startDate);
-            d.endDate = Date.parse(d.endDate);
-            d.updateDate = Date.parse(d.updateDate);
-            if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
-                d.card.updateDate = Date.parse(d.card.updateDate);
-                delete(d.card.id);
-            }
-            if(d.teams) {
-                d.teams.forEach((team) => {
-                    if(team.timeAllocations) {
-                        team.timeAllocations.forEach((ta) => {
-                            ta.startDate = Date.parse(ta.startDate);
-                            ta.endDate = Date.parse(ta.endDate);
-                        });
-                    }
-                });
-            }
-        });
-        return deliverables;
     }
     //#endregion
 

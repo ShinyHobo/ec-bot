@@ -72,28 +72,33 @@ export default abstract class RSINetwork {
     public static async getResponse(data: string, type: number): Promise<any> {
         return await new Promise((resolve, reject) => { // TODO - Refactor code to require only a singe variable
             const req = https.request(this.options, (res) => {
-              let data = '';
+              let returnData = '';
 
               res.on('data', (d) => {
-                data += d;
+                returnData += d;
               });
               res.on('end', () => {
-                if(data[0] === '<') {
-                    console.log(data);
+                if(returnData[0] === '<') {
+                    console.log(returnData);
                     reject('Server error');
                 }
-                switch(type){
-                    case 1: // Deliverables
-                        resolve(JSON.parse(data).data.progressTracker.deliverables);
-                        break;
-                    case 2: // Teams
-                        resolve(JSON.parse(data).data.progressTracker.teams);
-                        break;
-                    case 3: // Disciplines
-                        resolve(JSON.parse(data).data.progressTracker.disciplines);
-                    default:
-                        reject(`Invalid response query type ${type}`);
-                        break;
+                try {
+                    switch(type){
+                        case 1: // Deliverables
+                            resolve(JSON.parse(returnData).data.progressTracker.deliverables);
+                            break;
+                        case 2: // Teams
+                            resolve(JSON.parse(returnData).data.progressTracker.teams);
+                            break;
+                        case 3: // Disciplines
+                            resolve(JSON.parse(returnData).data.progressTracker.disciplines);
+                        default:
+                            reject(`Invalid response query type ${type}`);
+                            break;
+                    }
+                } catch(e) {
+                    // RSI is under heavy load right now, sorry!
+                    reject('');
                 }
               });
             });
