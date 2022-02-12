@@ -559,7 +559,7 @@ export abstract class Roadmap {
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
             if(args['publish']) {
-                messages = [...this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams), ...messages];
+                messages = [...this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
             }
         }
 
@@ -628,7 +628,7 @@ export abstract class Roadmap {
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
         if(publish) {
-            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams);
+            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
         }
 
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams ##  \n`);
@@ -641,7 +641,7 @@ export abstract class Roadmap {
             if(publish) {
                 let projectIcons = '';
                 match.project_ids.split(',').forEach(p => {
-                    projectIcons += `<span><img href="https://${this.rsi}${this.ProjectImages[p]}"/></span>`;
+                    projectIcons += `<span><img src="https://${this.rsi}${this.ProjectImages[p]}"/></span>`;
                 });
                 messages.push(`  \n### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${match.slug}" target="_blank">${match.title.trim()}</a>** ${projectIcons} ###  \n`);
             } else {
@@ -1083,8 +1083,8 @@ export abstract class Roadmap {
      * @param category The category of the post (should be a ReportCategoryEnum)
      * @returns The YAML frontmatter
      */
-    private static generateFrontmatter(date: string, category: string): string[] {
-        return ['---  \n','layout: post  \n',`title: "${category} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
+    private static generateFrontmatter(date: string, category: string, title: string): string[] {
+        return ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
     }
     //#endregion
 }
