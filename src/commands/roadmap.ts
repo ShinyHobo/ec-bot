@@ -52,10 +52,9 @@ export abstract class Roadmap {
                 this.delta(msg, db);
                 break;
             case 'compare':
-                this.generateProgressReportDelta(args, msg, db);
+                this.generateProgressTrackerDeltaReport(args, msg, db);
                 break;
             case 'teams':
-                // TODO - Add args to replace -t if available
                 this.lookup(["-t", ...args], msg, db);
                 break;
             default:
@@ -64,6 +63,7 @@ export abstract class Roadmap {
         }
     }
 
+    //#region Generate Delta
     /**
      * Looks up data from RSI and stores the delta
      * @param msg The command message
@@ -320,11 +320,11 @@ export abstract class Roadmap {
     }
 
     /**
-     * Adjusts the data for delta storage
+     * Adjust the deliverable objects for db insertion
      * @param deliverables The deliverables list to adjust
      * @returns The adjusted data
      */
-    private static adjustData(deliverables: any[]): any[] { // adjust the deliverable object for db insertion
+    private static adjustData(deliverables: any[]): any[] {
         deliverables.forEach((d)=>{
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
@@ -349,14 +349,16 @@ export abstract class Roadmap {
         });
         return deliverables;
     }
+    //#endregion
 
+    //#region Generate Progress Tracker Delta Report
     /**
      * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
      * @param argv The available arguments [TODO]
      * @param msg The command message
      * @param db The database connection
      */
-    private static async generateProgressReportDelta(argv: Array<string>, msg: Message, db: Database) {
+    private static async generateProgressTrackerDeltaReport(argv: Array<string>, msg: Message, db: Database) {
         let start: number = null;
         let end: number = null;
 
@@ -584,6 +586,39 @@ export abstract class Roadmap {
     }
 
     /**
+     * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
+     * @param deliverable The deliverable to display a card image for
+     * @param oldDeliverable The previous deliverable to check for deltas against
+     * @param publish Whether to generate additional YAML
+     * @returns The image messages
+     */
+     private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
+        const messages = [];
+        if(deliverable.card) {
+            if(oldDeliverable.card) {
+                const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
+                if(d.length) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const changesToDetect = ['title','description', 'category', 'release_title'];
+                    dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
+                        messages.push(`* Release ${_.capitalize(dc.change)} has been changed from ${oldDeliverable[dc.change]} to ${deliverable[dc.change]}  \n`);
+                    });
+                }
+            }
+
+            if(publish) {
+                const cardImage = deliverable.card.thumbnail.includes(RSINetwork.rsi) ? deliverable.card.thumbnail : `https://${RSINetwork.rsi}${deliverable.card.thumbnail}`;
+                messages.push(`![](${cardImage})  \n`);
+                messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
+            } else {
+                messages.push(`Release ${deliverable.card.release_title}  \n\n`);
+            }
+        }
+        return messages;
+    }
+    //#endregion
+
+    /**
      * Looks up raw data for a given time period or date [TODO]
      * @param argv The available arguments
      * @param msg The command message
@@ -626,6 +661,7 @@ export abstract class Roadmap {
         // }
     }
 
+    //#region Generate Schedule Deliverables Report
     /**
      * Generates a report for the items being worked on at the given time
      * @param compareTime The time to lookup time allocations with
@@ -685,59 +721,6 @@ export abstract class Roadmap {
         return messages;
     }
 
-    //#region Helper methods
-    /**
-     * Provides the list of available delta update dates
-     * @param db The database connection
-     * @returns The distinct list of delta update dates in descending order
-     */
-    private static getDeliverableDeltaDateList(db: Database): number[] {
-        return db.prepare("SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC").all().map(d => d.addedDate);
-    }
-
-    /**
-     * Looks up deliverables for a given date and connects the associated teams, cards, and time allocations
-     * @param date The date to lookup data for
-     * @param db The database connection
-     * @param alphabetize Whether to alphabetize the list
-     * @returns The list of deliverables
-     */
-    private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
-        let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
-        let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
-        dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && r.title === d.title && !r.title.includes("Unannounced"))));
-        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
-        const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
-        dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
-        
-        const cardIds = dbDeliverables.filter((dd) => dd.card_id).map((dd) => dd.card_id).toString();
-        const dbCards = db.prepare(`SELECT * FROM card_diff WHERE id IN (${cardIds})`).all();
-
-        const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
-        
-        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
-        const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
-        
-        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) GROUP BY uuid`).all();
-        dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
-
-        dbDeliverables.forEach((d) => {
-            d.card = dbCards.find((c) => c.id === d.card_id);
-            const timeAllocations = _.groupBy(dbTimeAllocations[d.id], 'team_id');
-            const teams = dbDeliverableTeams.filter(t => deliverableTeams[d.id] && deliverableTeams[d.id].some(tid => t.id === tid.team_id));
-            teams.forEach((t) => {
-                if(!d.teams) {
-                    d.teams = [];
-                }
-                let team = _.clone(t);
-                team.timeAllocations = timeAllocations[t.id];
-                d.teams.push(team);
-            });
-        });
-
-        return alphabetize ? _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']) : dbDeliverables;
-    };
-
     /**
      * Generates a text based waterfall chart displaying weeks
      * @param team The team
@@ -745,7 +728,7 @@ export abstract class Roadmap {
      * @param publish Whether to generate the waterfall chart or just the details
      * @returns A text based, collapsible waterfall chart text block
      */
-    private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
+     private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
 
         // TODO - Display disciplines here
 
@@ -800,37 +783,59 @@ export abstract class Roadmap {
         
         return `* ${team.title.trim()}  \n${timelines.join('')}`;
     }
+    //#endregion
+
+    //#region Helper methods
+    /**
+     * Provides the list of available delta update dates
+     * @param db The database connection
+     * @returns The distinct list of delta update dates in descending order
+     */
+    private static getDeliverableDeltaDateList(db: Database): number[] {
+        return db.prepare("SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC").all().map(d => d.addedDate);
+    }
 
     /**
-     * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
-     * @param deliverable The deliverable to display a card image for
-     * @param oldDeliverable The previous deliverable to check for deltas against
-     * @param publish Whether to generate additional YAML
-     * @returns The image messages
+     * Looks up deliverables for a given date and connects the associated teams, cards, and time allocations
+     * @param date The date to lookup data for
+     * @param db The database connection
+     * @param alphabetize Whether to alphabetize the list
+     * @returns The list of deliverables
      */
-    private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
-        const messages = [];
-        if(deliverable.card) {
-            if(oldDeliverable.card) {
-                const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
-                if(d.length) {
-                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    const changesToDetect = ['title','description', 'category', 'release_title'];
-                    dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
-                        messages.push(`* Release ${_.capitalize(dc.change)} has been changed from ${oldDeliverable[dc.change]} to ${deliverable[dc.change]}  \n`);
-                    });
-                }
-            }
+    private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
+        let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
+        let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
+        dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && r.title === d.title && !r.title.includes("Unannounced"))));
+        const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
+        dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
+        
+        const cardIds = dbDeliverables.filter((dd) => dd.card_id).map((dd) => dd.card_id).toString();
+        const dbCards = db.prepare(`SELECT * FROM card_diff WHERE id IN (${cardIds})`).all();
 
-            if(publish) {
-                const cardImage = deliverable.card.thumbnail.includes(RSINetwork.rsi) ? deliverable.card.thumbnail : `https://${RSINetwork.rsi}${deliverable.card.thumbnail}`;
-                messages.push(`![](${cardImage})  \n`);
-                messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
-            } else {
-                messages.push(`Release ${deliverable.card.release_title}  \n\n`);
-            }
-        }
-        return messages;
-    }
+        const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
+        
+        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
+        const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
+        
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) GROUP BY uuid`).all();
+        dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
+
+        dbDeliverables.forEach((d) => {
+            d.card = dbCards.find((c) => c.id === d.card_id);
+            const timeAllocations = _.groupBy(dbTimeAllocations[d.id], 'team_id');
+            const teams = dbDeliverableTeams.filter(t => deliverableTeams[d.id] && deliverableTeams[d.id].some(tid => t.id === tid.team_id));
+            teams.forEach((t) => {
+                if(!d.teams) {
+                    d.teams = [];
+                }
+                let team = _.clone(t);
+                team.timeAllocations = timeAllocations[t.id];
+                d.teams.push(team);
+            });
+        });
+
+        return alphabetize ? _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']) : dbDeliverables;
+    };
     //#endregion
 }
