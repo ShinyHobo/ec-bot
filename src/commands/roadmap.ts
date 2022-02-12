@@ -61,6 +61,13 @@ export abstract class Roadmap {
         SC: "ekm24a6ywr3o3"
     });
 
+    /** The available project images */
+    private static readonly ProjectImages = Object.freeze({
+       SQ42: "/media/b9ka4ohfxyb1kr/source/StarCitizen_Square_LargeTrademark_White_Transparent.png",
+       SC: "/media/z2vo2a613vja6r/source/Squadron42_White_Reserved_Transparent.png" 
+    });
+
+    /** RSI hostname */
     private static readonly rsi = 'robertsspaceindustries.com';
 
     /** The base query options for pulling down graphql results */
@@ -632,7 +639,11 @@ export abstract class Roadmap {
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
             if(publish) {
-                messages.push(`  \n### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${t.slug}" target="_blank">${match.title.trim()}</a>** [${match.project_ids.replace(',', ', ')}] ###  \n`);
+                let projectIcons = '';
+                match.project_ids.split(',').forEach(p => {
+                    projectIcons += `<span><img href="https://${this.rsi}${this.ProjectImages[p]}"/></span>`;
+                });
+                messages.push(`  \n### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${match.slug}" target="_blank">${match.title.trim()}</a>** ${projectIcons} ###  \n`);
             } else {
                 messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
             }
