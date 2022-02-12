@@ -91,13 +91,13 @@ export abstract class Roadmap {
                 return msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
             }
 
-            let teamPromises = [];
             responses.forEach((response)=>{
-                let metaData = response.metaData;
+                const metaData = response.metaData;
                 deliverables = deliverables.concat(metaData);
             });
 
             // download and attach development team time assignments to each deliverable
+            const teamPromises = [];
             deliverables.forEach((d) => {
                 teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
@@ -106,40 +106,53 @@ export abstract class Roadmap {
                 if(!completedQuery) {
                     return msg.channel.send(`Roadmap team retrieval timed out; please try again later.`).catch(console.error);
                 }
+
+                const disciplinePromises = []; // get dev lists for each team/deliverable combination
                 responses.forEach((response, index)=>{
                     // order is preserved, team index matches deliverable index
-                    let metaData = response.metaData;
+                    const metaData = response.metaData;
                     deliverables[index].teams = metaData;
+                    deliverables[index].teams.forEach(t => {
+                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines).catch(() => completedQuery = false));
+                    });
                 });
 
-                let delta = Date.now() - start;
-                console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
-
-                const compareTime = Date.now();
-
-                // populate db with initial values
-                let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
-                if(!deliverableDeltas.count) {
-                    
-                    const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
-                    fs.readdirSync(initializationDataDir).forEach((file) => {
-                        const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
+                Promise.all(disciplinePromises).then(async (disciplineResults) => {
+                    if(!completedQuery) {
+                        return msg.channel.send(`Roadmap discipline retrieval timed out; please try again later.`).catch(console.error);
+                    }
+                    disciplineResults.forEach(discipline => {
+                        const metaDate = discipline.metaData;
                     });
-                }
 
-                const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
-                console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
-
-                if(changes.updated || changes.removed || changes.readded || changes.added) {
-                    const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
-                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                        `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
-                        ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                } else {
-                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-                }
-
+                    let delta = Date.now() - start;
+                    console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
+    
+                    const compareTime = Date.now();
+    
+                    // populate db with initial values
+                    let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
+                    if(!deliverableDeltas.count) {
+                        
+                        const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
+                        fs.readdirSync(initializationDataDir).forEach((file) => {
+                            const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
+                            this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
+                        });
+                    }
+    
+                    const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
+                    console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
+    
+                    if(changes.updated || changes.removed || changes.readded || changes.added) {
+                        const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
+                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
+                            `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
+                            ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                    } else {
+                        msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                    }
+                }).catch(console.error);
             }).catch(console.error);
         }).catch(console.error);
     }

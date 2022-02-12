@@ -24,7 +24,8 @@ export default abstract class RSINetwork {
     /** The available query types */
     public static readonly QueryTypeEnum = Object.freeze({
         Deliverables: 1,
-        Teams: 2
+        Teams: 2,
+        Disciplines: 3
     });
 
     /** The available project types for the graphql queries */
@@ -69,7 +70,7 @@ export default abstract class RSINetwork {
      * @returns The response promise
      */
     public static async getResponse(data: string, type: number): Promise<any> {
-        return await new Promise((resolve, reject) => {
+        return await new Promise((resolve, reject) => { // TODO - Refactor code to require only a singe variable
             const req = https.request(this.options, (res) => {
               let data = '';
 
@@ -88,6 +89,8 @@ export default abstract class RSINetwork {
                     case 2: // Teams
                         resolve(JSON.parse(data).data.progressTracker.teams);
                         break;
+                    case 3: // Disciplines
+                        resolve(JSON.parse(data).data.progressTracker.disciplines);
                     default:
                         reject(`Invalid response query type ${type}`);
                         break;
@@ -119,7 +122,7 @@ export default abstract class RSINetwork {
      * @returns The query
      */
     public static deliverablesQuery(offset: number =0, limit: number=20, sortBy:string=this.SortByEnum.ALPHABETICAL, projectSlugs:any[]=[], categoryIds:any[]=[]): string {
-        let query: any = {
+        const query: any = {
             operationName: "deliverables",
             query: this.deliverablesGraphql,
             variables: {
@@ -143,14 +146,14 @@ export default abstract class RSINetwork {
     }
 
     /**
-     * Generates a graphql query for retrieving deliverables data from RSI
+     * Generates a graphql query for retrieving teams data from RSI
      * @param offset The offset
      * @param deliverableSlug The deliverable slug to limit the search by
      * @param sortBy SortByEnum sort type
      * @returns The query
      */
     public static teamsQuery(offset: number =0, deliverableSlug: string, sortBy=this.SortByEnum.ALPHABETICAL) {
-        let query: any = {
+        const query: any = {
             operationName: "teams",
             query: this.teamsGraphql,
             variables: {
@@ -160,6 +163,27 @@ export default abstract class RSINetwork {
                 "offset": offset,
                 "sortBy": `${sortBy}`,
                 "deliverableSlug": deliverableSlug,
+            }
+        };
+
+        return JSON.stringify(query);
+    }
+
+    /**
+     * Generates a graphql query for retrieving disciplines data from RSI
+     * @param teamSlug The team slug
+     * @param deliverableSlug The deliverable slug
+     * @returns The query
+     */
+    public static disciplinesQuery(teamSlug: string, deliverableSlug: string) {
+        const query: any = {
+            operationName: "disciplines",
+            query: this.disciplinesGraphql,
+            variables: {
+                "startDate": "2020-01-01",
+                "endDate": "2050-12-31",
+                "teamSlug": teamSlug,
+                "deliverableSlug": deliverableSlug
             }
         };
 
