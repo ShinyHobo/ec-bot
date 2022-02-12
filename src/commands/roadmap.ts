@@ -61,9 +61,11 @@ export abstract class Roadmap {
         SC: "ekm24a6ywr3o3"
     });
 
+    private static readonly rsi = 'robertsspaceindustries.com';
+
     /** The base query options for pulling down graphql results */
     private static readonly options = {
-        hostname: 'robertsspaceindustries.com',
+        hostname: this.rsi,
         path: '/graphql',
         method: 'POST',
         timeout: 10000,
@@ -407,7 +409,11 @@ export abstract class Roadmap {
                 }
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
-                messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                if(args['publish']) {
+                    messages.push(he.unescape(`### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                } else {
+                    messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                }
                 messages.push(he.unescape(`*${start} => ${end}*  \n`.toString()));
                 messages.push(he.unescape(this.shortenText(`${d.description}  \n`)));
 
@@ -441,6 +447,11 @@ export abstract class Roadmap {
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                         let update = `### **${title.trim()}** ###  \n`;
+
+                        if(args['publish']) {
+                            update = `### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`;
+                        }
+                        
                         update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
 
                         if(dChanges.some(p => p.change === 'startDate')) {
@@ -1040,7 +1051,7 @@ export abstract class Roadmap {
             }
 
             if(publish) {
-                const cardImage = deliverable.card.thumbnail.includes("robertspaceindustries.com") ? deliverable.card.thumbnail : `https://robertsspaceindustries.com${deliverable.card.thumbnail}`;
+                const cardImage = deliverable.card.thumbnail.includes(this.rsi) ? deliverable.card.thumbnail : `https://${this.rsi}${deliverable.card.thumbnail}`;
                 messages.push(`![](${cardImage})  \n`);
                 messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
             } else {
