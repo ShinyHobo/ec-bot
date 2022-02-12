@@ -15,11 +15,12 @@ export abstract class Roadmap {
     /** The bot base command */
     public static readonly command = '!roadmap';
     
-    
     /** The functionality of the command */
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
     
-    /** The bot command pattern */
+    /** 
+     * The bot command pattern
+     * --publish can be added to compare and teams to generate extras for website publishing */
     public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
         '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams <- Generates a report of currently assigned deliverables`';
     //#endregion
@@ -94,7 +95,7 @@ export abstract class Roadmap {
                 break;
             case 'teams':
                 // TODO - Add args to replace -t if available
-                this.lookup(["-t"], msg, db);
+                this.lookup(["-t", ...args], msg, db);
                 break;
             default:
                 msg.channel.send(this.usage).catch(console.error);
@@ -547,7 +548,7 @@ export abstract class Roadmap {
         const args = require('minimist')(argv);
         if('t' in args) {
             let compareTime = null;
-            if(args['t'] === true) {
+            if(args['t'] === 'teams') {
                 compareTime = Date.now();
             } else {
                 compareTime = this.convertDateToTime(args['t']);
@@ -555,7 +556,7 @@ export abstract class Roadmap {
 
             if(Number(compareTime)) {
                 const deliverables = this.buildDeliverables(compareTime, db);
-                const messages = this.generateTeamSprintReport(compareTime, deliverables, db);
+                const messages = this.generateTeamSprintReport(compareTime, deliverables, db, args['publish']);
                 this.sendTextMessageFile(messages, `sprint_report_${compareTime}.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
@@ -585,9 +586,10 @@ export abstract class Roadmap {
      * @param compareTime The time to lookup time allocations with
      * @param deliverables The list of deliverables to generate the report for
      * @param db The database connection
+     * @param publish Whether or not to generate the report online display
      * @returns The report lines array
      */
-    private static generateTeamSprintReport(compareTime: number, deliverables: any[], db: Database): string[] {
+    private static generateTeamSprintReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
         const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
         const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
