@@ -634,6 +634,17 @@ export abstract class Roadmap {
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
+        const introDesc = "This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to each time period.";
+        const outroDesc = "Part-time schedules are marked with '{PT}'.";
+        if(publish) {
+            messages.push(`### ${introDesc} Clicking the team name or one of the completion dates listed below it will display a rendering of the current gantt chart iteration. This chart provides `+
+            `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
+        } else {
+            messages.push(this.shortenText(`${introDesc} ${outroDesc}`));
+        }
+
+        messages.push("---  \n");
+
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
@@ -1044,7 +1055,7 @@ export abstract class Roadmap {
         const timelines = [];
         matchMergedSchedules.forEach((ms, msi) => {
             const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? 'x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}  \n`);
+            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()}${duplicates.length > 1? ' x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}  \n`);
         });
         
         return `* ${team.title.trim()}  \n${timelines.join('')}`;
