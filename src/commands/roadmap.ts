@@ -631,7 +631,12 @@ export abstract class Roadmap {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
-            messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
+            if(publish) {
+                messages.push(`  \n### **<a href="https://${this.rsi}/roadmap/progress-tracker/deliverables/${t.slug}" target="_blank">${match.title.trim()}</a>** [${match.project_ids.replace(',', ', ')}] ###  \n`);
+            } else {
+                messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
+            }
+            
             teams.forEach((mt, i) => {
                 messages.push((i ? '  \n' : '') + this.generateGanttChart(mt, compareTime, publish));
             });
