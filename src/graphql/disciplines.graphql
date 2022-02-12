@@ -1,0 +1,34 @@
+query disciplines($teamSlug: String!, $deliverableSlug: String!, $startDate: String!, $endDate: String!) {
+  progressTracker {
+  disciplines(
+  teamSlug: $teamSlug
+  deliverableSlug: $deliverableSlug
+  startDate: $startDate
+  endDate: $endDate
+  ) {
+    ...Discipline
+    timeAllocations {
+        ...TimeAllocation
+        #__typename
+      }
+      #__typename
+    }
+    #__typename
+  }
+}
+
+fragment Discipline on Discipline {
+  title
+  color
+  uuid
+  numberOfMembers
+  #__typename
+}
+
+fragment TimeAllocation on TimeAllocation {
+  startDate
+  endDate
+  uuid
+  partialTime
+  #__typename
+}

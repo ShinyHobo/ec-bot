@@ -45,6 +45,9 @@ export default abstract class RSINetwork {
     /** Graphql query for retrieving the list of teams and time allocations from the RSI progress tracker page */
     private static readonly teamsGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'teams.graphql'), 'utf-8');
 
+    /** Graphql query for retrieving the list of team disciplines and time allocations from the RSI progress tracker page */
+    private static readonly disciplinesGraphql = fs.readFileSync(path.join(__dirname, '..', 'graphql', 'disciplines.graphql'), 'utf-8');
+
     /** RSI hostname */
     public static readonly rsi = 'robertsspaceindustries.com';
 
