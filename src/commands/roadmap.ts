@@ -357,8 +357,8 @@ export abstract class Roadmap {
 
         msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
 
-        const first = this.buildDeliverables(start, db);
-        const last = this.buildDeliverables(end, db);
+        const first = this.buildDeliverables(start, db, true);
+        const last = this.buildDeliverables(end, db, true);
         const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
 
         let messages = [];
@@ -892,9 +892,10 @@ export abstract class Roadmap {
      * Looks up deliverables for a given date and connects the associated teams, cards, and time allocations
      * @param date The date to lookup data for
      * @param db The database connection
+     * @param alphabetize Whether to alphabetize the list
      * @returns The list of deliverables
      */
-    private static buildDeliverables(date: number, db: Database): any[] {
+    private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
         let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
         let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
         dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && r.title === d.title && !r.title.includes("Unannounced"))));
@@ -927,7 +928,7 @@ export abstract class Roadmap {
             });
         });
 
-        return _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']);
+        return alphabetize ? _.orderBy(dbDeliverables, [d => d.title.toLowerCase()], ['asc']) : dbDeliverables;
     };
 
     /**
