@@ -584,7 +584,7 @@ export abstract class Roadmap {
 
             if(Number(compareTime)) {
                 const deliverables = this.buildDeliverables(compareTime, db);
-                const messages = this.generateTeamSprintReport(compareTime, deliverables, db, args['publish']);
+                const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
                 this.sendTextMessageFile(messages, `${this.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
@@ -617,7 +617,7 @@ export abstract class Roadmap {
      * @param publish Whether or not to generate the report online display
      * @returns The report lines array
      */
-    private static generateTeamSprintReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
+    private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
         const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
         const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
@@ -649,7 +649,7 @@ export abstract class Roadmap {
         currentTasks.forEach((t) => {
             const match = deliverables.find(l => l.id === t.did);
             const schedules = groupedTasks[t.did];
-            const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
+            const teams = _.orderBy(match.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
             if(publish) {
                 let projectIcons = '';
                 match.project_ids.split(',').forEach(p => {
@@ -660,7 +660,7 @@ export abstract class Roadmap {
                 messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
             }
             
-            teams.forEach((mt, i) => {
+            teams.sort().forEach((mt, i) => {
                 messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
             });
         });
