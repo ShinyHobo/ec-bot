@@ -422,7 +422,8 @@ export abstract class Roadmap {
                     d.teams.forEach(t => {
                         const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
                         const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
-                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+                        const teamLine = `${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}`;
+                        messages.push(`* <a href="https://${this.rsi}/roadmap/progress-tracker/teams/${t.slug}" target="_blank">${teamLine}</a>  \n`);
                     });
                     messages.push('  \n');
                 }
@@ -511,12 +512,19 @@ export abstract class Roadmap {
                                         const dayDiff = this.convertMillisecondsToDays(timeDiff);
     
                                         if(dayDiff) {
-                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                            
+                                            const teamLine = `${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work`;
+                                            if(args['update']) {
+                                                update += `* <a href="https://${this.rsi}/roadmap/progress-tracker/teams/${l.slug}" target="_blank">${teamLine}</a>  \n`;
+                                            } else {
+                                                update += `* ${teamLine}  \n`;
+                                            }
                                         }
                                     }
                                 } else {
                                     const dayDiff = this.convertMillisecondsToDays(lDiff);
-                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
+                                    const teamLine = `${lt.title} was assigned ${dayDiff} days of work`;
+                                    update += `* <a href="https://${this.rsi}/roadmap/progress-tracker/teams/${l.slug}" target="_blank">${teamLine}</a>  \n`;
                                 }
                             });
 
