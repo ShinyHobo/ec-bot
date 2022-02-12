@@ -535,7 +535,7 @@ export abstract class Roadmap {
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
         }
 
-        this.sendTextMessageFile(messages, `progress_tracker_${end}.md`, msg);
+        this.sendTextMessageFile(messages, `${this.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
     }
 
     /**
@@ -557,7 +557,7 @@ export abstract class Roadmap {
             if(Number(compareTime)) {
                 const deliverables = this.buildDeliverables(compareTime, db);
                 const messages = this.generateTeamSprintReport(compareTime, deliverables, db, args['publish']);
-                this.sendTextMessageFile(messages, `sprint_report_${compareTime}.md`, msg);
+                this.sendTextMessageFile(messages, `${this.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
@@ -829,6 +829,19 @@ export abstract class Roadmap {
         const month = +date.substring(4, 6);
         const day = +date.substring(6, 8);
         return new Date(year, month - 1, day).getTime();
+    }
+
+    /**
+     * Converts time in milliseconds to a date string in YYYY-MM-DD format
+     * @param time The time in milliseconds to convert
+     * @returns The date string in YYYY-MM-DD format
+     */
+    private static convertTimeToDate(time: number): string {
+        const date = new Date(time);
+        const year = date.getFullYear();
+        const month = ("0" + (date.getMonth() + 1)).slice(-2);
+        const day = ("0" + date.getDate()).slice(-2);
+        return `${year}-${month}-${day}`;
     }
 
     /**
