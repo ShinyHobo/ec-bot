@@ -71,6 +71,12 @@ export abstract class Roadmap {
           'Content-Type': 'application/json'
         }
     };
+
+    /** The report category enum */
+    private static readonly ReportCategoryEnum = Object.freeze({
+        Delta: "Delta",
+        Teams: "Teams"
+    });
     //#endregion
 
     /**
@@ -533,6 +539,10 @@ export abstract class Roadmap {
             
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,this.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+
+            if(args['publish']) {
+                messages = [...this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams), ...messages];
+            }
         }
 
         this.sendTextMessageFile(messages, `${this.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
@@ -598,6 +608,10 @@ export abstract class Roadmap {
 
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
+
+        if(publish) {
+            messages = this.generateFrontmatter(this.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams);
+        }
 
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled tasks being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
@@ -1024,6 +1038,16 @@ export abstract class Roadmap {
             messages.push(`<sup>Release ${deliverable.card.release_title}</sup>  \n\n`);
         }
         return messages;
+    }
+
+    /**
+     * Generates YAML frontmatter for use on a Jekyll website
+     * @param date The date the report is for
+     * @param category The category of the post (should be a ReportCategoryEnum)
+     * @returns The YAML frontmatter
+     */
+    private static generateFrontmatter(date: string, category: string): string[] {
+        return ['---  \n','layout: post  \n',`title: "${category} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
     }
     //#endregion
 }
