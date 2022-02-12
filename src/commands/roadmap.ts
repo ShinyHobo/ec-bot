@@ -910,7 +910,7 @@ export abstract class Roadmap {
      * @returns The merged date ranges
      */
     private static mergeDateRanges(ranges) {
-        ranges = ranges.sort((a,b) => a.startDate - b.startDate);
+        ranges = ranges.sort((a,b) => a[0].startDate - b[0].startDate).map(r => r[0]);
 
         let returnRanges = [];
         let currentRange = null;
@@ -995,7 +995,10 @@ export abstract class Roadmap {
      * @returns A text based, collapsible gantt chart text block
      */
      private static generateGanttChart(team: any, compareTime, publish: boolean = false): string {
-        const uniqueSchedules = _.uniqBy(team.timeAllocations, (time) => [time.startDate, time.endDate].join());
+
+        // TODO - Display disciplines here
+
+        const uniqueSchedules = _._(team.timeAllocations).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
         const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
         const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
 
@@ -1031,7 +1034,8 @@ export abstract class Roadmap {
 
             let timelines = `<ul>`;
             matchMergedSchedules.forEach((ms, msi) => {
-                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}</li>`;
+                const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
+                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? 'x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}</li>`;
             });
             timelines += `</ul>`;
             return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${gantts.join('<br>')}</p></details>`
@@ -1039,7 +1043,8 @@ export abstract class Roadmap {
 
         const timelines = [];
         matchMergedSchedules.forEach((ms, msi) => {
-            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
+            const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
+            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? 'x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}  \n`);
         });
         
         return `* ${team.title.trim()}  \n${timelines.join('')}`;
