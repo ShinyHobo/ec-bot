@@ -634,10 +634,11 @@ export abstract class Roadmap {
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
-        const introDesc = "This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to each time period.";
+        const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
+            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
         const outroDesc = "Part-time schedules are marked with '{PT}'.";
         if(publish) {
-            messages.push(`### ${introDesc} Clicking the team name or one of the completion dates listed below it will display a rendering of the current gantt chart iteration. This chart provides `+
+            messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
             `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
         } else {
             messages.push(this.shortenText(`${introDesc} ${outroDesc}`));
@@ -660,7 +661,7 @@ export abstract class Roadmap {
             }
             
             teams.forEach((mt, i) => {
-                messages.push((i ? '  \n' : '') + this.generateGanttChart(mt, compareTime, publish));
+                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
             });
         });
 
@@ -999,13 +1000,13 @@ export abstract class Roadmap {
     };
 
     /**
-     * Generates a text based gantt chart displaying weeks
+     * Generates a text based waterfall chart displaying weeks
      * @param team The team
      * @param compareTime The time to generate the chart around (yearly)
-     * @param publish Whether to generate the gantt chart or just the details
-     * @returns A text based, collapsible gantt chart text block
+     * @param publish Whether to generate the waterfall chart or just the details
+     * @returns A text based, collapsible waterfall chart text block
      */
-     private static generateGanttChart(team: any, compareTime, publish: boolean = false): string {
+     private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
 
         // TODO - Display disciplines here
 
@@ -1013,12 +1014,12 @@ export abstract class Roadmap {
         const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
         const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
 
-        let gantts = [];
+        let waterfalls = [];
         if(publish) {
             const time = new Date(compareTime);
             const firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
             mergedSchedules.forEach((s) => {
-                const newGantt = new Array(52).fill('..');
+                const newWaterfall = new Array(52).fill('..');
                 let start  = new Date(s.startDate);
                 start = start < firstOfYear ? firstOfYear : start;
                 const end = new Date(s.endDate);
@@ -1030,32 +1031,32 @@ export abstract class Roadmap {
                 const thisWeek = this.getWeek(time, firstOfYear);
                 const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
                 const period = new Array(endWeek + 1 - startWeek).fill(fill);
-                newGantt.splice(startWeek - 1, period.length, ...period);
+                newWaterfall.splice(startWeek - 1, period.length, ...period);
                 if(startWeek <= thisWeek && thisWeek <= endWeek) {
                     if(s.partialTime) {
-                        newGantt.splice(thisWeek - 1, 1, '~|');
+                        newWaterfall.splice(thisWeek - 1, 1, '~|');
                     } else {
-                        newGantt.splice(thisWeek - 1, 1, '=|');
+                        newWaterfall.splice(thisWeek - 1, 1, '=|');
                     }
                 } else {
-                    newGantt.splice(thisWeek - 1, 1, '.|');
+                    newWaterfall.splice(thisWeek - 1, 1, '.|');
                 }
-                gantts.push(newGantt.join(''));
+                waterfalls.push(newWaterfall.join(''));
             });
 
             let timelines = `<ul>`;
             matchMergedSchedules.forEach((ms, msi) => {
                 const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? 'x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}</li>`;
+                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}</li>`;
             });
             timelines += `</ul>`;
-            return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${gantts.join('<br>')}</p></details>`
+            return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${waterfalls.join('<br>')}</p></details>`
         }
 
         const timelines = [];
         matchMergedSchedules.forEach((ms, msi) => {
             const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()}${duplicates.length > 1? ' x' + duplicates.length : ''} ${ms.partialTime?"{PT}":""}  \n`);
+            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}  \n`);
         });
         
         return `* ${team.title.trim()}  \n${timelines.join('')}`;
