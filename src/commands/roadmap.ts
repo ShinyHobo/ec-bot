@@ -621,8 +621,8 @@ export abstract class Roadmap {
             const schedules = groupedTasks[t.did];
             const teams = match.teams.filter(mt => schedules.some(s => s.team_id === mt.id));
             messages.push(`  \n### **${match.title.trim()}** [${match.project_ids.replace(',', ', ')}] ###  \n`);
-            teams.forEach(mt => {
-                messages.push(this.shortenText(this.generateGanttChart(mt, compareTime)));
+            teams.forEach((mt, i) => {
+                messages.push((i ? '  \n' : '') + this.generateGanttChart(mt, compareTime, publish));
             });
         });
 
@@ -964,53 +964,58 @@ export abstract class Roadmap {
      * Generates a text based gantt chart displaying weeks
      * @param team The team
      * @param compareTime The time to generate the chart around (yearly)
+     * @param publish Whether to generate the gantt chart or just the details
      * @returns A text based, collapsible gantt chart text block
      */
-     private static generateGanttChart(team: any, compareTime): string {
+     private static generateGanttChart(team: any, compareTime, publish: boolean = false): string {
         const uniqueSchedules = _.uniqBy(team.timeAllocations, (time) => [time.startDate, time.endDate].join());
         const mergedSchedules = this.mergeDateRanges(uniqueSchedules);
         const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
 
         let gantts = [];
-        let time = new Date(compareTime);
-        let firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
-        mergedSchedules.forEach((s) => {
-            let newGantt = new Array(52).fill('..');
-            let start  = new Date(s.startDate);
-            start = start < firstOfYear ? firstOfYear : start;
-            const end = new Date(s.endDate);
-            if(end < start) {
-                return;
-            }
-            const startWeek = this.getWeek(start, firstOfYear);
-            const endWeek = this.getWeek(end, firstOfYear);
-            const thisWeek = this.getWeek(time, firstOfYear);
-            let fill = '==';
-            if(s.partialTime) {
-                fill = '~~';
-            }
-            let period = new Array(endWeek + 1 - startWeek).fill(fill);
-            newGantt.splice(startWeek - 1, period.length, ...period);
-            if(startWeek <= thisWeek && thisWeek <= endWeek) {
-                if(s.partialTime) {
-                    newGantt.splice(thisWeek - 1, 1, '~|');
-                } else {
-                    newGantt.splice(thisWeek - 1, 1, '=|');
+        if(publish) {
+            const time = new Date(compareTime);
+            const firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
+            mergedSchedules.forEach((s) => {
+                const newGantt = new Array(52).fill('..');
+                let start  = new Date(s.startDate);
+                start = start < firstOfYear ? firstOfYear : start;
+                const end = new Date(s.endDate);
+                if(end < start) {
+                    return;
                 }
-            } else {
-                newGantt.splice(thisWeek - 1, 1, '.|');
-            }
-            gantts.push(newGantt.join(''));
-        });
+                const startWeek = this.getWeek(start, firstOfYear);
+                const endWeek = this.getWeek(end, firstOfYear);
+                const thisWeek = this.getWeek(time, firstOfYear);
+                const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
+                const period = new Array(endWeek + 1 - startWeek).fill(fill);
+                newGantt.splice(startWeek - 1, period.length, ...period);
+                if(startWeek <= thisWeek && thisWeek <= endWeek) {
+                    if(s.partialTime) {
+                        newGantt.splice(thisWeek - 1, 1, '~|');
+                    } else {
+                        newGantt.splice(thisWeek - 1, 1, '=|');
+                    }
+                } else {
+                    newGantt.splice(thisWeek - 1, 1, '.|');
+                }
+                gantts.push(newGantt.join(''));
+            });
 
-        let timelines = `<ul>`;
+            let timelines = `<ul>`;
+            matchMergedSchedules.forEach((ms, msi) => {
+                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}</li>`;
+            });
+            timelines += `</ul>`;
+            return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${gantts.join('<br>')}</p></details>`
+        }
+
+        const timelines = [];
         matchMergedSchedules.forEach((ms, msi) => {
-            timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}</li>`;
+            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${ms.partialTime?"{PT}":""}  \n`);
         });
-        timelines += `</ul>`;
         
-
-        return `<details><summary>${team.title.trim()} ${timelines} \n</summary><p>${gantts.join('<br>')}</p></details>`;
+        return `* ${team.title.trim()}  \n${timelines.join('')}`;
     }
 
     /**
