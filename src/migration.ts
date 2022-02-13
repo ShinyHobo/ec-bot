@@ -8,6 +8,15 @@ export default abstract class Migration {
             db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
 
+            if(true) { // debug reset
+                db.prepare("DROP TABLE IF EXISTS deliverable_diff").run();
+                db.prepare("DROP TABLE IF EXISTS team_diff").run();
+                db.prepare("DROP TABLE IF EXISTS deliverable_teams").run();
+                db.prepare("DROP TABLE IF EXISTS card_diff").run();
+                db.prepare("DROP TABLE IF EXISTS timeAllocation_diff").run()
+                db.prepare("DROP TABLE IF EXISTS discipline_diff").run()
+            }
+
             // add json data format as tables
             db.prepare("CREATE TABLE IF NOT EXISTS deliverable_diff ("+
                 "id	INTEGER NOT NULL UNIQUE,"+
