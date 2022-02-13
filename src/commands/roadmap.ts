@@ -873,7 +873,7 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
-        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) GROUP BY uuid`).all();
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate) FROM timeAllocation_diff AS ta INNER JOIN discipline_diff AS di ON di.id = ta.discipline_id WHERE deliverable_id IN (${deliverableIds}) GROUP BY ta.uuid`).all();
         dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
 
         dbDeliverables.forEach((d) => {
