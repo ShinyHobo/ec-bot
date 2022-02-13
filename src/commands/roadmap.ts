@@ -784,59 +784,65 @@ export abstract class Roadmap {
      * @returns A text based, collapsible waterfall chart text block
      */
      private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
-
-        // TODO - Display disciplines here
-
-        const uniqueSchedules = _._(team.timeAllocations).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
-        const mergedSchedules = GeneralHelpers.mergeDateRanges(uniqueSchedules);
-        const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-
-        let waterfalls = [];
-        if(publish) {
-            const time = new Date(compareTime);
-            const firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
-            mergedSchedules.forEach((s) => {
-                const newWaterfall = new Array(52).fill('..');
-                let start  = new Date(s.startDate);
-                start = start < firstOfYear ? firstOfYear : start;
-                const end = new Date(s.endDate);
-                if(end < start) {
-                    return;
-                }
-                const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
-                const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
-                const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
-                const period = new Array(endWeek + 1 - startWeek).fill(fill);
-                newWaterfall.splice(startWeek - 1, period.length, ...period);
-                if(startWeek <= thisWeek && thisWeek <= endWeek) {
-                    if(s.partialTime) {
-                        newWaterfall.splice(thisWeek - 1, 1, '~|');
-                    } else {
-                        newWaterfall.splice(thisWeek - 1, 1, '=|');
-                    }
-                } else {
-                    newWaterfall.splice(thisWeek - 1, 1, '.|');
-                }
-                waterfalls.push(newWaterfall.join(''));
-            });
-
-            let timelines = `<ul>`;
-            matchMergedSchedules.forEach((ms, msi) => {
-                const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}</li>`;
-            });
-            timelines += `</ul>`;
-            return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${waterfalls.join('<br>')}</p></details>`
-        }
-
         const timelines = [];
-        matchMergedSchedules.forEach((ms, msi) => {
-            const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}  \n`);
+        let waterfalls = [];
+
+        timelines.push(publish ? `<details><summary>${team.title.trim()} ${timelines}  \n` : `* ${team.title.trim()}  \n`);
+
+        const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
+        disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
+            // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
+            // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
+            let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
+            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, ...sprint[0]}));
+            const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints);
+            const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+            
+            if(publish) {
+                const time = new Date(compareTime);
+                const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
+                // mergedSchedules.forEach((s) => {
+                //     const newWaterfall = new Array(52).fill('..');
+                //     let start  = new Date(s.startDate);
+                //     start = start < firstOfYear ? firstOfYear : start;
+                //     const end = new Date(s.endDate);
+                //     if(end < start) {
+                //         return;
+                //     }
+                //     const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
+                //     const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
+                //     const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
+                //     const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
+                //     const period = new Array(endWeek + 1 - startWeek).fill(fill);
+                //     newWaterfall.splice(startWeek - 1, period.length, ...period);
+                //     if(startWeek <= thisWeek && thisWeek <= endWeek) {
+                //         if(s.partialTime) {
+                //             newWaterfall.splice(thisWeek - 1, 1, '~|');
+                //         } else {
+                //             newWaterfall.splice(thisWeek - 1, 1, '=|');
+                //         }
+                //     } else {
+                //         newWaterfall.splice(thisWeek - 1, 1, '.|');
+                //     }
+                //     waterfalls.push(newWaterfall.join(''));
+                // });
+
+                // let timelines = `<ul>`;
+                // matchMergedSchedules.forEach((ms, msi) => {
+                //     const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
+                //     timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}</li>`;
+                // });
+                // timelines += `</ul>`;
+            } else {
+                matchMergedSchedules.forEach(ms => {
+                    const fullTimePercent = Math.round(ms.fullTime / (ms.fullTime + ms.partTime) * 100);
+                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev(s) working ${fullTimePercent > 50 ? fullTimePercent : 100 - fullTimePercent}% ${fullTimePercent > 50 ? 'full' : 'part'}-time`+
+                        ` on ${ms.fullTime + ms.partTime} tasks thru ${new Date(ms.endDate).toDateString()}  \n`);
+                });
+            }
         });
-        
-        return `* ${team.title.trim()}  \n${timelines.join('')}`;
+
+        return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
 
