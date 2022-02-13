@@ -233,7 +233,7 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
-        const mostRecentDisciplineIds = dbTimeAllocations.map((dd) => dd.discipline_id).toString();
+        const mostRecentDisciplineIds = dbTimeAllocations.filter(dd => dd.discipline_id).map((dd) => dd.discipline_id).toString();
         let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate) FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid`).all();
 
         // TODO - investigate cleaning up removed deliverables code below, check buildDeliverables()
