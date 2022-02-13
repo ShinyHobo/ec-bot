@@ -840,14 +840,16 @@ export abstract class Roadmap {
                 timelines.push(`<ul>`);
                 matchMergedSchedules.forEach((ms, msi) => {
                     const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
-                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev(s) working on ${ms.fullTime + ms.partTime} task(s) at ${fullTimePercent}% avg. capacity`+
+                    const tasks = ms.fullTime + ms.partTime;
+                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
                         ` thru ${new Date(ms.endDate).toDateString()}</li>`);
                 });
                 timelines.push(`</ul>`);
             } else {
                 matchMergedSchedules.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
-                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev(s) working on ${ms.fullTime + ms.partTime} task(s) at ${fullTimePercent}% avg. capacity`+
+                    const tasks = ms.fullTime + ms.partTime;
+                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
                         ` thru ${new Date(ms.endDate).toDateString()}  \n`);
                 });
             }
