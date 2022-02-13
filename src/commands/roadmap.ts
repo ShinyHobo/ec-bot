@@ -744,7 +744,7 @@ export abstract class Roadmap {
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
             'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
-        const outroDesc = "Part-time schedules are marked with '{PT}'.";
+        const outroDesc = "";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
             `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
@@ -801,44 +801,54 @@ export abstract class Roadmap {
             if(publish) {
                 const time = new Date(compareTime);
                 const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
-                mergedSchedules.forEach((s) => {
-                    const newWaterfall = new Array(52).fill('..');
-                    let start  = new Date(s.startDate);
+                const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
+                let newWaterfall = [];
+                
+                sprints.forEach((sprint) => {
+                    let start  = new Date(sprint.startDate);
                     start = start < firstOfYear ? firstOfYear : start;
-                    const end = new Date(s.endDate);
+                    const end = new Date(sprint.endDate);
                     if(end < start) {
                         return;
                     }
+                    if(!newWaterfall.length) {
+                        newWaterfall = new Array(52).fill('..');
+                    }
+                    const weightedTimePercent = this.calculateTaskCapacity(sprint.fullTime, sprint.partTime);
                     const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
                     const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                    const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
-                    const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too easily confused with =
+                    const fill = weightedTimePercent === 1 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
                     const period = new Array(endWeek + 1 - startWeek).fill(fill);
                     newWaterfall.splice(startWeek - 1, period.length, ...period);
-                    if(startWeek <= thisWeek && thisWeek <= endWeek) {
-                        if(s.partialTime) {
-                            newWaterfall.splice(thisWeek - 1, 1, '~|');
-                        } else {
-                            newWaterfall.splice(thisWeek - 1, 1, '=|');
-                        }
-                    } else {
-                        newWaterfall.splice(thisWeek - 1, 1, '.|');
-                    }
-                    waterfalls.push(newWaterfall.join(''));
                 });
+                if(newWaterfall.length) {
+                    const weekType = newWaterfall[thisWeek - 1];
+                    const day = time.getDay();
 
+                    if(weekType === '==') {
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
+                    } else if((weekType === '~~')){
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|~':'~|');
+                    } else {
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
+                    }
+
+                    waterfalls.push(newWaterfall.join(''));
+                }
+                
+                // descriptions for the current weeks in descending order of display
                 timelines.push(`<ul>`);
                 matchMergedSchedules.forEach((ms, msi) => {
-                    const fullTimePercent = Math.round(ms.fullTime / (ms.fullTime + ms.partTime) * 100);
-                    timelines.push(`<li> - ${ms.numberOfMembers}x ${ms.title} dev(s) working ${fullTimePercent > 50 ? fullTimePercent : 100 - fullTimePercent}% ${fullTimePercent > 50 ? 'full' : 'part'}-time`+
-                        ` on ${ms.fullTime + ms.partTime} tasks thru ${new Date(ms.endDate).toDateString()}</li>`);
+                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev(s) working on ${ms.fullTime + ms.partTime} task(s) at ${fullTimePercent}% avg. capacity`+
+                        ` thru ${new Date(ms.endDate).toDateString()}</li>`);
                 });
                 timelines.push(`</ul>`);
             } else {
                 matchMergedSchedules.forEach(ms => {
-                    const fullTimePercent = Math.round(ms.fullTime / (ms.fullTime + ms.partTime) * 100);
-                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev(s) working ${fullTimePercent > 50 ? fullTimePercent : 100 - fullTimePercent}% ${fullTimePercent > 50 ? 'full' : 'part'}-time`+
-                        ` on ${ms.fullTime + ms.partTime} tasks thru ${new Date(ms.endDate).toDateString()}  \n`);
+                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev(s) working on ${ms.fullTime + ms.partTime} task(s) at ${fullTimePercent}% avg. capacity`+
+                        ` thru ${new Date(ms.endDate).toDateString()}  \n`);
                 });
             }
         });
@@ -848,6 +858,16 @@ export abstract class Roadmap {
     //#endregion
 
     //#region Helper methods
+    /**
+     * Approximates the developer capacity for the given task numbers
+     * @param fullTime The number of full-time tasks (100%)
+     * @param partTime The number of part-time tasks (50%)
+     * @returns The weighted average of full-time capacity
+     */
+    private static calculateTaskCapacity(fullTime: number = 0, partTime: number = 0) {
+        return (fullTime + partTime * .5) / (fullTime + partTime);
+    }
+
     /**
      * Provides the list of available delta update dates
      * @param db The database connection
