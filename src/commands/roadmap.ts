@@ -193,7 +193,7 @@ export abstract class Roadmap {
                             ta.endDate = Date.parse(ta.endDate);
                             if(ta.discipline) {
                                 ta.numberOfMembers = ta.discipline.numberOfMembers;
-                                ta.disciplineTitle = ta.discipline.title;
+                                ta.itle = ta.discipline.title;
                                 ta.disciplineUuid = ta.discipline.uuid;
                                 delete(ta.discipline);
                             }
@@ -245,7 +245,7 @@ export abstract class Roadmap {
             const rTeams = [];
             const rTimes = [];
             if(teams) {
-                const disciplineProperties = ['numberOfMembers', 'disciplineTitle', 'disciplineUuid'];
+                const disciplineProperties = ['numberOfMembers', 'title', 'disciplineUuid'];
                 teams.forEach((dt) => {
                     const match = dbTeams.find(t => t.slug === dt.slug);
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
@@ -273,7 +273,7 @@ export abstract class Roadmap {
 
                             const diMatch = dbDisciplines.find(di => di.disciplineUuid === ta.disciplineUuid);
                             if(!diMatch || taChanges.some(tac => disciplineProperties.includes(tac.change && tac.change.toString()))) {
-                                const disciplineRow = disciplinesInsert.run([ta.numberOfMembers, ta.disciplineTitle, ta.disciplineUuid, now]);
+                                const disciplineRow = disciplinesInsert.run([ta.numberOfMembers, ta.title, ta.disciplineUuid, now]);
                                 disciplineId = disciplineRow.lastInsertRowid;
                                 dbDisciplines.push({id: disciplineId, ...ta}); // filter duplicates
                             } else {
@@ -873,7 +873,14 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
-        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate) FROM timeAllocation_diff AS ta INNER JOIN discipline_diff AS di ON di.id = ta.discipline_id WHERE deliverable_id IN (${deliverableIds}) GROUP BY ta.uuid`).all();
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid FROM timeAllocation_diff AS ta INNER JOIN discipline_diff AS di ON di.id = ta.discipline_id WHERE deliverable_id IN (${deliverableIds}) GROUP BY ta.uuid`).all();
+        dbTimeAllocations.forEach(ta => {
+            ta.disciplineUuid = ta.uuid;
+            ta.id = ta.time_id;
+            ta.uuid = ta.time_uuid;
+            delete(ta.time_id);
+            delete(ta.time_uuid);
+        });
         dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
 
         dbDeliverables.forEach((d) => {
