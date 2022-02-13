@@ -743,8 +743,8 @@ export abstract class Roadmap {
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
-            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
-        const outroDesc = "";
+            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.'+'';
+        const outroDesc = "The capacity calculation is an approximation based on the weighted average of all part-time and full-time tasks in the given time period.";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
             `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
