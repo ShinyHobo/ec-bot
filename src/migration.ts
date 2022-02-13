@@ -68,6 +68,20 @@ export default abstract class Migration {
             teamsWithWrongDates.forEach(t => {
                 db.prepare(`UPDATE team_diff SET startDate = ${Date.parse(t.startDate)}, endDate = ${Date.parse(t.endDate)} WHERE id = ${t.id}`).run();
             });
+
+            // Add discipline tracking
+            db.prepare("CREATE TABLE IF NOT EXISTS discipline_diff("+
+                "id INTEGER NOT NULL UNIQUE,"+
+                "numberOfMembers INTEGER,"+
+                "title TEXT,"+
+                "uuid TEXT,"+
+                "addedDate INTEGER,"+
+                "PRIMARY KEY(id AUTOINCREMENT));").run();
+
+            const disciplineIdExists = db.prepare("SELECT * FROM sqlite_master WHERE type = 'table' AND name = 'timeAllocation_diff' AND sql LIKE '%discipline_id%'").get();
+            if(!disciplineIdExists) {
+                db.prepare("ALTER TABLE timeAllocation_diff ADD COLUMN discipline_id INTEGER").run();
+            }
         });
 
         migrate();

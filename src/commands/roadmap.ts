@@ -91,13 +91,13 @@ export abstract class Roadmap {
                 return msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
             }
 
-            let teamPromises = [];
             responses.forEach((response)=>{
-                let metaData = response.metaData;
+                const metaData = response.metaData;
                 deliverables = deliverables.concat(metaData);
             });
 
             // download and attach development team time assignments to each deliverable
+            const teamPromises = [];
             deliverables.forEach((d) => {
                 teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams).catch(() => completedQuery = false));
             });
@@ -106,42 +106,103 @@ export abstract class Roadmap {
                 if(!completedQuery) {
                     return msg.channel.send(`Roadmap team retrieval timed out; please try again later.`).catch(console.error);
                 }
+
+                const disciplinePromises = []; // get dev lists for each team/deliverable combination
                 responses.forEach((response, index)=>{
                     // order is preserved, team index matches deliverable index
-                    let metaData = response.metaData;
+                    const metaData = response.metaData;
                     deliverables[index].teams = metaData;
+                    deliverables[index].teams.forEach(t => {
+                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines).catch(() => completedQuery = false));
+                    });
                 });
 
-                let delta = Date.now() - start;
-                console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
-
-                const compareTime = Date.now();
-
-                // populate db with initial values
-                let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
-                if(!deliverableDeltas.count) {
-                    
-                    const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
-                    fs.readdirSync(initializationDataDir).forEach((file) => {
-                        const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
-                        this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
+                Promise.all(disciplinePromises).then(async (disciplineResults) => {
+                    if(!completedQuery) {
+                        return msg.channel.send(`Roadmap discipline retrieval timed out; please try again later.`).catch(console.error);
+                    }
+                    disciplineResults.forEach(disciplines => {
+                        disciplines.forEach(discipline => {
+                            // TODO - refactor this; not sure how to just select the matching time allocation at the bottom of the search, but this can't be efficient
+                            const dMatch = deliverables.find(d => d.teams && d.teams.find(t => t.timeAllocations && t.timeAllocations.find(ta => discipline.timeAllocations && discipline.timeAllocations.some(dta => dta.uuid === ta.uuid))));
+                            if(dMatch) {
+                                const team = dMatch.teams.find(t => t.timeAllocations.some(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid)));
+                                const timeAllocations = team.timeAllocations.filter(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid));
+                                timeAllocations.forEach(ta => {
+                                    ta.discipline = discipline;
+                                });
+                            }
+                        });
+                        
                     });
-                }
 
-                const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
-                console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
-
-                if(changes.updated || changes.removed || changes.readded || changes.added) {
-                    const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
-                    msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                        `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
-                        ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
-                } else {
-                    msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
-                }
-
+                    let delta = Date.now() - start;
+                    console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
+    
+                    const compareTime = Date.now();
+    
+                    // populate db with initial values
+                    let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
+                    if(!deliverableDeltas.count) {
+                        
+                        const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
+                        fs.readdirSync(initializationDataDir).forEach((file) => {
+                            const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
+                            this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
+                        });
+                    }
+    
+                    const changes = this.insertChanges(db, compareTime, this.adjustData(deliverables));
+                    console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
+    
+                    if(changes.updated || changes.removed || changes.readded || changes.added) {
+                        const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
+                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
+                            `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
+                            ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                    } else {
+                        msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                    }
+                }).catch(console.error);
             }).catch(console.error);
         }).catch(console.error);
+    }
+
+    /**
+     * Adjust the deliverable objects for db insertion
+     * @param deliverables The deliverables list to adjust
+     * @returns The adjusted data
+     */
+     private static adjustData(deliverables: any[]): any[] {
+        deliverables.forEach((d)=>{
+            d.startDate = Date.parse(d.startDate);
+            d.endDate = Date.parse(d.endDate);
+            d.updateDate = Date.parse(d.updateDate);
+            if(d.card) {
+                d.card.tid = d.card.id,
+                d.card.release_id = d.card.release.id;
+                d.card.release_title = d.card.release.title;
+                d.card.updateDate = Date.parse(d.card.updateDate);
+                delete(d.card.id);
+            }
+            if(d.teams) {
+                d.teams.forEach((team) => {
+                    if(team.timeAllocations) {
+                        team.timeAllocations.forEach((ta) => {
+                            ta.startDate = Date.parse(ta.startDate);
+                            ta.endDate = Date.parse(ta.endDate);
+                            if(ta.discipline) {
+                                ta.numberOfMembers = ta.discipline.numberOfMembers;
+                                ta.itle = ta.discipline.title;
+                                ta.disciplineUuid = ta.discipline.uuid;
+                                delete(ta.discipline);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        return deliverables;
     }
 
     /** 
@@ -152,11 +213,14 @@ export abstract class Roadmap {
      * @returns The changes that were detected (addition, removal, modification)
      */
     private static insertChanges(db: Database, now: number, deliverables: any[]): any {
+        // TODO - Refactor code, use joins where possible
+
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
         const deliverableTeamsInsert = db.prepare("INSERT INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
-        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id) VALUES (?,?,?,?,?,?,?)");
+        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id, discipline_id) VALUES (?,?,?,?,?,?,?,?)");
+        const disciplinesInsert = db.prepare("INSERT INTO discipline_diff (numberOfMembers, title, uuid, addedDate) VALUES (?,?,?,?)");
 
         // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
         let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
@@ -169,6 +233,8 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
+        const mostRecentDisciplineIds = dbTimeAllocations.map((dd) => dd.discipline_id).toString();
+        let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate) FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid`).all();
 
         // TODO - investigate cleaning up removed deliverables code below, check buildDeliverables()
         const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
@@ -176,9 +242,10 @@ export abstract class Roadmap {
             !dbRemovedDeliverables.some(l => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced"))));
 
         const insertTeamsAndTimeAllocations = (teams: any[], justIds: boolean = true): any => {
-            let rTeams = [];
-            let rTimes = [];
+            const rTeams = [];
+            const rTimes = [];
             if(teams) {
+                const disciplineProperties = ['numberOfMembers', 'title', 'disciplineUuid'];
                 teams.forEach((dt) => {
                     const match = dbTeams.find(t => t.slug === dt.slug);
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
@@ -199,12 +266,24 @@ export abstract class Roadmap {
                     // analyze changes to time allocations
                     if(dt.timeAllocations) {
                         dt.timeAllocations.forEach((ta) => {
+                            let disciplineId = null;
                             const taMatch = dbTimeAllocations.find(t => t.uuid === ta.uuid);
                             const taDiff = diff.getDiff(taMatch, ta);
-                            if(taDiff.length || !taMatch) {
-                                rTimes.push({team_id: teamId, ...ta});
+                            const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
+
+                            const diMatch = dbDisciplines.find(di => di.disciplineUuid === ta.disciplineUuid);
+                            if(!diMatch || taChanges.some(tac => disciplineProperties.includes(tac.change && tac.change.toString()))) {
+                                const disciplineRow = disciplinesInsert.run([ta.numberOfMembers, ta.title, ta.disciplineUuid, now]);
+                                disciplineId = disciplineRow.lastInsertRowid;
+                                dbDisciplines.push({id: disciplineId, ...ta}); // filter duplicates
                             } else {
-                                rTimes.push({team_id: teamId, ...taMatch});
+                                disciplineId = diMatch.id;
+                            }
+
+                            if(!taMatch || taDiff.length) {
+                                rTimes.push({team_id: teamId, discipline_id: disciplineId, ...ta});
+                            } else {
+                                rTimes.push({team_id: teamId, discipline_id: disciplineId, ...taMatch});
                             }
                         });
                     }
@@ -214,7 +293,7 @@ export abstract class Roadmap {
         }
 
         const insertDeliverables = db.transaction((dList: [any]) => {
-            let changes = {added: 0, removed: 0, updated: 0, readded: 0};
+            let changes = {added: 0, removed: 0, updated: 0, readded: 0}; // TODO - keep track of other changes (teams, disciplines, cards, times). Possible that these are sometimes changed without affecting the deliverable
             // check for team differences
             const dTeams = _.uniqBy(dList.filter((d) => d.teams).flatMap((d) => d.teams).map((t)=>_.omit(t, 'timeAllocations', 'uuid')), 'slug');
             if(dbTeams.length) {
@@ -230,11 +309,18 @@ export abstract class Roadmap {
             }
 
             if(dbTimeAllocations.length) {
-                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
                 const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
+                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
                 const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
                 removedTimes.forEach((rt) => {
-                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id]);
+                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
+                });
+
+                // disciplines are directly tied to time allocations by their uuid, one to many relationship
+                const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
+                const removedDisciplines = dbDisciplines.filter(f => !dTimes.some(l => l.disciplineUuid === f.uuid) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
+                removedDisciplines.forEach((rd) => {
+                    disciplinesInsert.run([null, rd.title, rd.uuid, now]);
                 });
             }
 
@@ -308,7 +394,7 @@ export abstract class Roadmap {
                     });
 
                     timeAllocations.forEach((ta) => {
-                         timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did]);
+                         timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did, ta.discipline_id]);
                     });
                 }
 
@@ -317,37 +403,6 @@ export abstract class Roadmap {
         });
 
         return insertDeliverables(deliverables);
-    }
-
-    /**
-     * Adjust the deliverable objects for db insertion
-     * @param deliverables The deliverables list to adjust
-     * @returns The adjusted data
-     */
-    private static adjustData(deliverables: any[]): any[] {
-        deliverables.forEach((d)=>{
-            d.startDate = Date.parse(d.startDate);
-            d.endDate = Date.parse(d.endDate);
-            d.updateDate = Date.parse(d.updateDate);
-            if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
-                d.card.updateDate = Date.parse(d.card.updateDate);
-                delete(d.card.id);
-            }
-            if(d.teams) {
-                d.teams.forEach((team) => {
-                    if(team.timeAllocations) {
-                        team.timeAllocations.forEach((ta) => {
-                            ta.startDate = Date.parse(ta.startDate);
-                            ta.endDate = Date.parse(ta.endDate);
-                        });
-                    }
-                });
-            }
-        });
-        return deliverables;
     }
     //#endregion
 
@@ -688,8 +743,8 @@ export abstract class Roadmap {
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
-            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
-        const outroDesc = "Part-time schedules are marked with '{PT}'.";
+            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.'+'';
+        const outroDesc = "The capacity calculation is an approximation based on the weighted average of all part-time and full-time tasks in the given time period.";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
             `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
@@ -729,63 +784,92 @@ export abstract class Roadmap {
      * @returns A text based, collapsible waterfall chart text block
      */
      private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
-
-        // TODO - Display disciplines here
-
-        const uniqueSchedules = _._(team.timeAllocations).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
-        const mergedSchedules = GeneralHelpers.mergeDateRanges(uniqueSchedules);
-        const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-
-        let waterfalls = [];
-        if(publish) {
-            const time = new Date(compareTime);
-            const firstOfYear = new Date(time.getFullYear(), 0, 1); // 1/1
-            mergedSchedules.forEach((s) => {
-                const newWaterfall = new Array(52).fill('..');
-                let start  = new Date(s.startDate);
-                start = start < firstOfYear ? firstOfYear : start;
-                const end = new Date(s.endDate);
-                if(end < start) {
-                    return;
-                }
-                const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
-                const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
-                const fill = s.partialTime ? '~~' : '=='; // Thought about using ≈, but its too confusing looking
-                const period = new Array(endWeek + 1 - startWeek).fill(fill);
-                newWaterfall.splice(startWeek - 1, period.length, ...period);
-                if(startWeek <= thisWeek && thisWeek <= endWeek) {
-                    if(s.partialTime) {
-                        newWaterfall.splice(thisWeek - 1, 1, '~|');
-                    } else {
-                        newWaterfall.splice(thisWeek - 1, 1, '=|');
-                    }
-                } else {
-                    newWaterfall.splice(thisWeek - 1, 1, '.|');
-                }
-                waterfalls.push(newWaterfall.join(''));
-            });
-
-            let timelines = `<ul>`;
-            matchMergedSchedules.forEach((ms, msi) => {
-                const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-                timelines += `<li>${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}</li>`;
-            });
-            timelines += `</ul>`;
-            return `<details><summary>${team.title.trim()} ${timelines}  \n</summary><p>${waterfalls.join('<br>')}</p></details>`
-        }
-
         const timelines = [];
-        matchMergedSchedules.forEach((ms, msi) => {
-            const duplicates = uniqueSchedules.find(us => us.some(ta => ta.id == ms.id));
-            timelines.push(` -${matchMergedSchedules.length>1?` #${msi+1}`:""} until ${new Date(ms.endDate).toDateString()} ${duplicates.length > 1? `x${duplicates.length} ` : ''}${ms.partialTime?"{PT}":""}  \n`);
+        let waterfalls = [];
+
+        timelines.push(publish ? `<details><summary>${team.title.trim()} ${timelines}  \n` : `* ${team.title.trim()}  \n`);
+
+        const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
+        disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
+            // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
+            // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
+            let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
+            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, ...sprint[0]}));
+            const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints);
+            const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+            
+            if(publish) {
+                const time = new Date(compareTime);
+                const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
+                const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
+                let newWaterfall = [];
+                
+                sprints.forEach((sprint) => {
+                    let start  = new Date(sprint.startDate);
+                    start = start < firstOfYear ? firstOfYear : start;
+                    const end = new Date(sprint.endDate);
+                    if(end < start) {
+                        return;
+                    }
+                    if(!newWaterfall.length) {
+                        newWaterfall = new Array(52).fill('..');
+                    }
+                    const weightedTimePercent = this.calculateTaskCapacity(sprint.fullTime, sprint.partTime);
+                    const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
+                    const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
+                    const fill = weightedTimePercent === 1 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
+                    const period = new Array(endWeek + 1 - startWeek).fill(fill);
+                    newWaterfall.splice(startWeek - 1, period.length, ...period);
+                });
+                if(newWaterfall.length) {
+                    const weekType = newWaterfall[thisWeek - 1];
+                    const day = time.getDay();
+
+                    if(weekType === '==') {
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
+                    } else if((weekType === '~~')){
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|~':'~|');
+                    } else {
+                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
+                    }
+
+                    waterfalls.push(newWaterfall.join(''));
+                }
+                
+                // descriptions for the current weeks in descending order of display
+                timelines.push(`<ul>`);
+                matchMergedSchedules.forEach((ms, msi) => {
+                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    const tasks = ms.fullTime + ms.partTime;
+                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
+                        ` thru ${new Date(ms.endDate).toDateString()}</li>`);
+                });
+                timelines.push(`</ul>`);
+            } else {
+                matchMergedSchedules.forEach(ms => {
+                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    const tasks = ms.fullTime + ms.partTime;
+                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
+                        ` thru ${new Date(ms.endDate).toDateString()}  \n`);
+                });
+            }
         });
-        
-        return `* ${team.title.trim()}  \n${timelines.join('')}`;
+
+        return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
 
     //#region Helper methods
+    /**
+     * Approximates the developer capacity for the given task numbers
+     * @param fullTime The number of full-time tasks (100%)
+     * @param partTime The number of part-time tasks (50%)
+     * @returns The weighted average of full-time capacity
+     */
+    private static calculateTaskCapacity(fullTime: number = 0, partTime: number = 0) {
+        return (fullTime + partTime * .5) / (fullTime + partTime);
+    }
+
     /**
      * Provides the list of available delta update dates
      * @param db The database connection
@@ -818,7 +902,14 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds}))`).all();
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
-        let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) GROUP BY uuid`).all();
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid FROM timeAllocation_diff AS ta INNER JOIN discipline_diff AS di ON di.id = ta.discipline_id WHERE deliverable_id IN (${deliverableIds}) GROUP BY ta.uuid`).all();
+        dbTimeAllocations.forEach(ta => {
+            ta.disciplineUuid = ta.uuid;
+            ta.id = ta.time_id;
+            ta.uuid = ta.time_uuid;
+            delete(ta.time_id);
+            delete(ta.time_uuid);
+        });
         dbTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
 
         dbDeliverables.forEach((d) => {

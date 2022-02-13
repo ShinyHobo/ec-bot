@@ -54,7 +54,7 @@ export default abstract class GeneralHelpers {
      * @returns The merged date ranges
      */
     public static mergeDateRanges(ranges) {
-        ranges = ranges.sort((a,b) => a[0].startDate - b[0].startDate).map(r => r[0]);
+        ranges = ranges.sort((a,b) => a.startDate - b.startDate);
 
         let returnRanges = [];
         let currentRange = null;
@@ -70,14 +70,16 @@ export default abstract class GeneralHelpers {
             }
 
             const currentEndDate = new Date(currentRange.endDate);
-            currentEndDate.setDate(currentEndDate.getDate() + 1);
+            currentEndDate.setDate(currentEndDate.getDate() + 4); // covers time overlap when sprint ends on a weekend
             const currentEndTime = currentEndDate.getTime();
 
-            if (currentEndTime != r.startDate) {
+            if (currentEndTime < r.startDate) {
                 returnRanges.push(currentRange);
                 currentRange = r;
             } else if (currentRange.endDate < r.endDate) {
                 currentRange.endDate = r.endDate;
+                currentRange.partTime += r.partTime;
+                currentRange.fullTime += r.fullTime;
             }
         });
 
