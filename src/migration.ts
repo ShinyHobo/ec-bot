@@ -8,7 +8,7 @@ export default abstract class Migration {
             db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
 
-            if(true) { // debug reset
+            if(false) { // debug reset
                 db.prepare("DROP TABLE IF EXISTS deliverable_diff").run();
                 db.prepare("DROP TABLE IF EXISTS team_diff").run();
                 db.prepare("DROP TABLE IF EXISTS deliverable_teams").run();
