@@ -504,6 +504,23 @@ export abstract class Roadmap {
                         const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
                         const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
                         messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+
+                        const disciplineSchedules = _._(t.timeAllocations).groupBy('title').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            let partTime = 0;
+                            let fullTime = 0;
+                            let timeSpan = 0;
+                            ds.filter(v => d.updateDate < v.endDate).forEach(ds => {
+                                if(ds.partialTime) {
+                                    partTime++;
+                                } else {
+                                    fullTime++;
+                                }
+                                timeSpan += ds.endDate - ds.startDate;
+                            });
+                            const load = Math.round(100 * this.calculateTaskLoad({numberOfMembers: ds[0].numberOfMembers, fullTime: fullTime, partTime: partTime, startDate: 0, endDate: timeSpan}));
+                            messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} with ${partTime + fullTime} tasks (${load}% load)  \n`); 
+                        });
                     });
                     messages.push('  \n');
                 }
@@ -872,7 +889,7 @@ export abstract class Roadmap {
     //#region Helper methods
     /**
      * Approximates the developer load for the given task numbers
-     * @param schedule The developer discipline schedule
+     * @param schedule The developer discipline schedule (numberOfMembers, fullTime, partTime, endDate, startDate)
      * @returns The weighted average of full-time load
      */
     private static calculateTaskLoad(schedule: any): number {
