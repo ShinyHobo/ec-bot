@@ -193,7 +193,7 @@ export abstract class Roadmap {
                             ta.endDate = Date.parse(ta.endDate);
                             if(ta.discipline) {
                                 ta.numberOfMembers = ta.discipline.numberOfMembers;
-                                ta.itle = ta.discipline.title;
+                                ta.title = ta.discipline.title;
                                 ta.disciplineUuid = ta.discipline.uuid;
                                 delete(ta.discipline);
                             }
@@ -692,6 +692,10 @@ export abstract class Roadmap {
             if(Number(compareTime)) {
                 const deliverables = this.buildDeliverables(compareTime, db);
                 const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
+                if(!messages.length) {
+                    msg.channel.send("Insufficient data to generate report.");
+                    return;
+                }
                 GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
@@ -729,6 +733,11 @@ export abstract class Roadmap {
         let messages = [];
         const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()})`).all();
         const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
+
+        if(!currentTasks.length) {
+            return messages;
+        }
+
         const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
         const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
 
