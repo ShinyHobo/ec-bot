@@ -467,10 +467,10 @@ export abstract class Roadmap {
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
 
-                // TODO - Add how many devs have been freed up, and their departments
                 if(dMatch.teams) {
                     const freedTeams = dMatch.teams.map(t => t.title);
                     messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
+                    // TODO - Add how many devs have been freed up for each discipline
                 }
 
                 messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
@@ -752,8 +752,9 @@ export abstract class Roadmap {
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
-            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.'+'';
-        const outroDesc = "The capacity calculation is an approximation based on the weighted average of all part-time and full-time tasks in the given time period.";
+            'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
+        const outroDesc = "The load calculation is an approximation based on the sum of the part-time and full-time tasks averaged at 80 hours to complete divided by the team capacity at a focus factor of 60% over the given time period. "+
+            "Without exact hourly estimates for each task, a more accurate assessment doesn't seem likely, so interpret the load as a given dev group's general utilization on a deliverable.";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
             `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
@@ -823,10 +824,10 @@ export abstract class Roadmap {
                     if(!newWaterfall.length) {
                         newWaterfall = new Array(52).fill('..');
                     }
-                    const weightedTimePercent = this.calculateTaskCapacity(sprint.fullTime, sprint.partTime);
+                    const weightedTimePercent = this.calculateTaskLoad(sprint);
                     const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
                     const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                    const fill = weightedTimePercent === 1 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
+                    const fill = weightedTimePercent > 1 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
                     const period = new Array(endWeek + 1 - startWeek).fill(fill);
                     newWaterfall.splice(startWeek - 1, period.length, ...period);
                 });
@@ -848,17 +849,17 @@ export abstract class Roadmap {
                 // descriptions for the current weeks in descending order of display
                 timelines.push(`<ul>`);
                 matchMergedSchedules.forEach((ms, msi) => {
-                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
-                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
+                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
                         ` thru ${new Date(ms.endDate).toDateString()}</li>`);
                 });
                 timelines.push(`</ul>`);
             } else {
                 matchMergedSchedules.forEach(ms => {
-                    const fullTimePercent = Math.round(this.calculateTaskCapacity(ms.fullTime, ms.partTime) * 100);
+                    const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
-                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} at ${fullTimePercent}% avg. capacity`+
+                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
                         ` thru ${new Date(ms.endDate).toDateString()}  \n`);
                 });
             }
@@ -870,13 +871,17 @@ export abstract class Roadmap {
 
     //#region Helper methods
     /**
-     * Approximates the developer capacity for the given task numbers
-     * @param fullTime The number of full-time tasks (100%)
-     * @param partTime The number of part-time tasks (50%)
-     * @returns The weighted average of full-time capacity
+     * Approximates the developer load for the given task numbers
+     * @param schedule The developer discipline schedule
+     * @returns The weighted average of full-time load
      */
-    private static calculateTaskCapacity(fullTime: number = 0, partTime: number = 0) {
-        return (fullTime + partTime * .5) / (fullTime + partTime);
+    private static calculateTaskLoad(schedule: any): number {
+        const timespan = GeneralHelpers.convertMillisecondsToDays(schedule.endDate - schedule.startDate);
+        const teamCapacity = schedule.numberOfMembers * 0.6 * timespan * 8; // focus factor
+        const scheduleLoad = (schedule.fullTime + schedule.partTime * .5) * 80; // guess at 80 hours per task on average
+        //const taskMemberRatio = (schedule.fullTime + schedule.partTime * .5) / schedule.numberOfMembers;
+        //const weightedTaskAverage = (schedule.fullTime + schedule.partTime * .5) / (schedule.fullTime + schedule.partTime);
+        return scheduleLoad / teamCapacity;
     }
 
     /**
