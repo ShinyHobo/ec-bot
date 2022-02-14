@@ -13,8 +13,8 @@ export default abstract class Migration {
                 db.prepare("DROP TABLE IF EXISTS team_diff").run();
                 db.prepare("DROP TABLE IF EXISTS deliverable_teams").run();
                 db.prepare("DROP TABLE IF EXISTS card_diff").run();
-                db.prepare("DROP TABLE IF EXISTS timeAllocation_diff").run()
-                db.prepare("DROP TABLE IF EXISTS discipline_diff").run()
+                db.prepare("DROP TABLE IF EXISTS timeAllocation_diff").run();
+                db.prepare("DROP TABLE IF EXISTS discipline_diff").run();
             }
 
             // add json data format as tables
