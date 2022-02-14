@@ -757,9 +757,9 @@ export abstract class Roadmap {
             "Without exact hourly estimates for each task, a more accurate assessment doesn't seem likely, so interpret the load as a given dev group's general utilization on a deliverable.";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
-            `an overview of the schedule breakdown of each team in week long segments. ${outroDesc} ###  \n`);
+            `an overview of the schedule breakdown of each team in week long segments.<br/><br/>${outroDesc} ###  \n`);
         } else {
-            messages.push(GeneralHelpers.shortenText(`${introDesc} ${outroDesc}`));
+            messages.push(GeneralHelpers.shortenText(`${introDesc}  \n${outroDesc}`));
         }
 
         messages.push("---  \n");
