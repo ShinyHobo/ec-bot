@@ -85,7 +85,7 @@ export abstract class Roadmap {
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 20), RSINetwork.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 20), RSINetwork.QueryTypeEnum.Deliverables, offset).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -102,7 +102,7 @@ export abstract class Roadmap {
             // download and attach development team time assignments to each deliverable
             const teamPromises = [];
             deliverables.forEach((d) => {
-                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams).catch(() => completedQuery = false));
+                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams, 20 * teamPromises.length).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
@@ -116,7 +116,7 @@ export abstract class Roadmap {
                     const metaData = response.metaData;
                     deliverables[index].teams = metaData;
                     deliverables[index].teams.forEach(t => {
-                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines).catch(() => completedQuery = false));
+                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines, 20 * disciplinePromises.length).catch(() => completedQuery = false));
                     });
                 });
 
@@ -131,12 +131,16 @@ export abstract class Roadmap {
                             if(dMatch) {
                                 const team = dMatch.teams.find(t => t.timeAllocations.some(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid)));
                                 const timeAllocations = team.timeAllocations.filter(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid));
+
+                                if(timeAllocations.length > 1) {
+                                    let sner = "";
+                                    let bler = sner;
+                                }
                                 timeAllocations.forEach(ta => {
                                     ta.discipline = discipline;
                                 });
                             }
                         });
-                        
                     });
 
                     let delta = Date.now() - start;
@@ -921,19 +925,26 @@ export abstract class Roadmap {
                 delete(t.addedDate);
                 delete(t.id);
                 t.timeAllocations.forEach(ta => {
-                    // ta.numberOfMembers = ta.discipline.numberOfMembers;
-                    // ta.title = ta.discipline.title;
-                    // ta.disciplineUuid = ta.discipline.uuid;
+                    ta.startDate = GeneralHelpers.convertTimeToFullDate(ta.startDate);
+                    ta.endDate = GeneralHelpers.convertTimeToFullDate(ta.endDate);
+                    ta.discipline = {
+                        title: ta.title,
+                        numberOfMembers: ta.numberOfMembers,
+                        uuid: ta.disciplineUuid
+                    };
+                    delete(ta.title);
                     delete(ta.addedDate);
                     delete(ta.id);
                     delete(ta.deliverable_id);
                     delete(ta.discipline_id);
                     delete(ta.team_id);
+                    delete(ta.numberOfMembers);
+                    delete(ta.disciplineUuid);
                     delete(ta['MAX(ta.addedDate)']);
                 });
             });
         });
-        let sner = deliverablesToExport;
+        
     }
 
     //#region Helper methods

@@ -46,12 +46,12 @@ export default abstract class GeneralHelpers {
     public static convertTimeToFullDate(time: number): string {
         const date = new Date(time);
         const year = date.getUTCFullYear();
-        const month = ("0" + (date.getUTCMonth() + 1)).slice(-2);
-        const dayNumber = ("0" + date.getUTCDate()).slice(-2);
+        const month = this.shortMonths[date.getUTCMonth()];
+        const dayNumber = date.getUTCDate().toString().padStart(2, '0');
         const day = this.shortDays[date.getUTCDay()];
-        const hours = date.getUTCHours();
-        const minutes = date.getUTCMinutes();
-        const seconds = date.getUTCSeconds();
+        const hours = date.getUTCHours().toString().padStart(2, '0');
+        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
         return `${day}, ${dayNumber} ${month} ${year} ${hours}:${minutes}:${seconds} +0000`;
     }
 
