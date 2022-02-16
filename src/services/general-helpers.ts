@@ -3,13 +3,22 @@ import * as _ from 'lodash';
 
 /** General helper function collection */
 export default abstract class GeneralHelpers {
+    /** The days of the week in 3 character format */
+    private static shortDays = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    /** The days of the week in long format */
+    private static longDays = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    /** The months of the year in 3 character format */
+    private static shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    /** The months of the year in long format */
+    private static longMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     
     /**
-     * The YYYYMMDD date to convert
+     * The YYYYMMDD or YYYY-MM-DD date to convert
      * @param date The date to convert
      * @returns The date as an epoch timestamp in ms
      */
     public static convertDateToTime(date: string): number {
+        date = date.replace(/-/g,'');
         const year = +date.substring(0, 4);
         const month = +date.substring(4, 6);
         const day = +date.substring(6, 8);
@@ -21,12 +30,29 @@ export default abstract class GeneralHelpers {
      * @param time The time in milliseconds to convert
      * @returns The date string in YYYY-MM-DD format
      */
-    public static convertTimeToDate(time: number): string {
+    public static convertTimeToHyphenatedDate(time: number): string {
         const date = new Date(time);
         const year = date.getFullYear();
         const month = ("0" + (date.getMonth() + 1)).slice(-2);
         const day = ("0" + date.getDate()).slice(-2);
         return `${year}-${month}-${day}`;
+    }
+
+    /**
+     * Converts the time in milliseconds to a UTC date string in RSI query format
+     * @param time The time in milliseconds to convert
+     * @returns The date string in DDD, dd MMM YYYY hh:mm:ss +0000 format
+     */
+    public static convertTimeToFullDate(time: number): string {
+        const date = new Date(time);
+        const year = date.getUTCFullYear();
+        const month = ("0" + (date.getUTCMonth() + 1)).slice(-2);
+        const dayNumber = ("0" + date.getUTCDate()).slice(-2);
+        const day = this.shortDays[date.getUTCDay()];
+        const hours = date.getUTCHours();
+        const minutes = date.getUTCMinutes();
+        const seconds = date.getUTCSeconds();
+        return `${day}, ${dayNumber} ${month} ${year} ${hours}:${minutes}:${seconds} +0000`;
     }
 
     /**

@@ -57,6 +57,9 @@ export abstract class Roadmap {
             case 'teams':
                 this.lookup(["-t", ...args], msg, db);
                 break;
+            case 'export':
+                this.exportJson(args, msg, db, true);
+                break;
             default:
                 msg.channel.send(this.usage).catch(console.error);
                 break;
@@ -633,11 +636,11 @@ export abstract class Roadmap {
             messages.splice(1,0,GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
             if(args['publish']) {
-                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
+                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
             }
         }
 
-        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
+        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, msg);
     }
 
     /**
@@ -696,7 +699,7 @@ export abstract class Roadmap {
                     msg.channel.send("Insufficient data to generate report.");
                     return;
                 }
-                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
+                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
@@ -745,7 +748,7 @@ export abstract class Roadmap {
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
         if(publish) {
-            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
+            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
         }
 
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
@@ -867,6 +870,71 @@ export abstract class Roadmap {
         return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
+
+    /**
+     * Converts database model to json and exports it as a file
+     * @param argv The argument array
+     * @param msg The command message
+     * @param db The database connection
+     * @param discord Whether to send the file to discord or to save locally
+     */
+    private static exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
+        let exportDate: number = null;
+
+        const args = require('minimist')(argv.slice(1));
+
+        // select closest existing date prior to or on entered date
+        if(args['t'] && args['t'] !== true) {
+            if(Number(args['t'])) {
+                const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['t'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                exportDate = dbEnd && dbEnd.addedDate;
+            }
+        } else {
+            const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+            exportDate = dbEnd && dbEnd.addedDate;
+        }
+        
+        if(!exportDate) {
+            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+        }
+
+        const deliverablesToExport = this.buildDeliverables(exportDate, db, true);
+        deliverablesToExport.forEach(d => { // strip added fields
+            delete(d.id);
+            delete(d.card_id);
+            delete(d.addedDate);
+            delete(d.max);
+            d.startDate = GeneralHelpers.convertTimeToFullDate(d.startDate);
+            d.endDate = GeneralHelpers.convertTimeToFullDate(d.endDate);
+            d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
+            d.projects = [];
+            d.project_ids.split(',').forEach(pi => {
+                d.projects.push({title: pi.title === 'SC' ? 'Star Citizen' : 'Squadron 42'});
+            });
+            if(d.card) {
+                d.card.id = d.card.tid;
+                d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
+                delete(d.card.addedDate);
+                delete(d.card.tid);
+            }
+            d.teams.forEach(t => {
+                delete(t.addedDate);
+                delete(t.id);
+                t.timeAllocations.forEach(ta => {
+                    // ta.numberOfMembers = ta.discipline.numberOfMembers;
+                    // ta.title = ta.discipline.title;
+                    // ta.disciplineUuid = ta.discipline.uuid;
+                    delete(ta.addedDate);
+                    delete(ta.id);
+                    delete(ta.deliverable_id);
+                    delete(ta.discipline_id);
+                    delete(ta.team_id);
+                    delete(ta['MAX(ta.addedDate)']);
+                });
+            });
+        });
+        let sner = deliverablesToExport;
+    }
 
     //#region Helper methods
     /**
