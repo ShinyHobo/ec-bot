@@ -32,6 +32,9 @@ export abstract class Roadmap {
         Delta: "Delta",
         Teams: "Teams"
     });
+
+    /** Set to true to allow the command to export to discord */
+    private static readonly AllowExportSnapshotsToDiscord = false;
     //#endregion
 
     /**
@@ -56,6 +59,9 @@ export abstract class Roadmap {
                 break;
             case 'teams':
                 this.lookup(["-t", ...args], msg, db);
+                break;
+            case 'export':
+                this.exportJson(args, msg, db, true);
                 break;
             default:
                 msg.channel.send(this.usage).catch(console.error);
@@ -82,7 +88,7 @@ export abstract class Roadmap {
         let deliverablePromises = [];
 
         do {
-            deliverablePromises.push(RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 20), RSINetwork.QueryTypeEnum.Deliverables).catch(() => completedQuery = false));
+            deliverablePromises.push(RSINetwork.getResponse(RSINetwork.deliverablesQuery(offset, 20), RSINetwork.QueryTypeEnum.Deliverables, offset).catch(() => completedQuery = false));
             offset += 20;
         } while(offset < initialResponse.totalCount)
 
@@ -99,7 +105,7 @@ export abstract class Roadmap {
             // download and attach development team time assignments to each deliverable
             const teamPromises = [];
             deliverables.forEach((d) => {
-                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams).catch(() => completedQuery = false));
+                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams, 20 * teamPromises.length).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
@@ -113,7 +119,7 @@ export abstract class Roadmap {
                     const metaData = response.metaData;
                     deliverables[index].teams = metaData;
                     deliverables[index].teams.forEach(t => {
-                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines).catch(() => completedQuery = false));
+                        disciplinePromises.push(RSINetwork.getResponse(RSINetwork.disciplinesQuery(t.slug, deliverables[index].slug), RSINetwork.QueryTypeEnum.Disciplines, 20 * disciplinePromises.length).catch(() => completedQuery = false));
                     });
                 });
 
@@ -128,12 +134,13 @@ export abstract class Roadmap {
                             if(dMatch) {
                                 const team = dMatch.teams.find(t => t.timeAllocations.some(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid)));
                                 const timeAllocations = team.timeAllocations.filter(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid));
+
+                                // A given discipline is assigned to exactly one, unique time allocation
                                 timeAllocations.forEach(ta => {
                                     ta.discipline = discipline;
                                 });
                             }
                         });
-                        
                     });
 
                     let delta = Date.now() - start;
@@ -650,11 +657,11 @@ export abstract class Roadmap {
             messages.splice(1,0,GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
             if(args['publish']) {
-                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
+                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
             }
         }
 
-        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(end)}-Progress-Tracker-Delta.md`, msg);
+        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, msg);
     }
 
     /**
@@ -713,7 +720,7 @@ export abstract class Roadmap {
                     msg.channel.send("Insufficient data to generate report.");
                     return;
                 }
-                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToDate(compareTime)}-Scheduled-Deliverables.md`, msg);
+                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, msg);
             } else {
                 msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
@@ -762,7 +769,7 @@ export abstract class Roadmap {
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
         if(publish) {
-            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
+            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
         }
 
         messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
@@ -885,6 +892,103 @@ export abstract class Roadmap {
         return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
+
+    /**
+     * Converts database model(s) to json and exports them
+     * @param argv The argument array (-t YYYYMMDD for specific one or --all for all)
+     * @param msg The command message
+     * @param db The database connection
+     * @param discord Whether to send the file to discord or to save locally
+     */
+    private static async exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
+        let exportDates: number[] = [];
+
+        const args = require('minimist')(argv.slice(1));
+            
+        if(args['all'] === true) {
+            exportDates = this.getDeliverableDeltaDateList(db);
+        } else {
+            // select closest existing date prior to or on entered date
+            if(args['t'] && args['t'] !== true) {
+                if(Number(args['t'])) {
+                    const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['t'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                    exportDates.push(dbEnd && dbEnd.addedDate);
+                }
+            } else {
+                const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+                exportDates.push(dbEnd && dbEnd.addedDate);
+            }
+
+            if(!exportDates.length) {
+                return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+            }
+        }
+
+        await exportDates.forEach(async (exportDate) => {
+            const deliverablesToExport = this.buildDeliverables(exportDate, db, true);
+            deliverablesToExport.forEach(d => { // strip added fields
+                delete(d.id);
+                delete(d.card_id);
+                delete(d.addedDate);
+                delete(d.max);
+                d.startDate = GeneralHelpers.convertTimeToFullDate(d.startDate);
+                d.endDate = GeneralHelpers.convertTimeToFullDate(d.endDate);
+                d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
+                d.projects = [];
+                d.project_ids.split(',').forEach(pi => {
+                    d.projects.push({title: pi === 'SC' ? 'Star Citizen' : 'Squadron 42'});
+                });
+                delete(d.project_ids);
+                if(d.card) {
+                    d.card.id = d.card.tid;
+                    d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
+                    delete(d.card.addedDate);
+                    delete(d.card.tid);
+                } else {
+                    d.card = null;
+                }
+
+                if(d.teams) {
+                    d.teams.forEach(t => {
+                        delete(t.addedDate);
+                        delete(t.id);
+                        if(t.timeAllocations) {
+                            t.timeAllocations.forEach(ta => {
+                                ta.startDate = GeneralHelpers.convertTimeToFullDate(ta.startDate);
+                                ta.endDate = GeneralHelpers.convertTimeToFullDate(ta.endDate);
+                                ta.discipline = {
+                                    title: ta.title,
+                                    numberOfMembers: ta.numberOfMembers,
+                                    uuid: ta.disciplineUuid
+                                };
+                                delete(ta.title);
+                                delete(ta.addedDate);
+                                delete(ta.id);
+                                delete(ta.deliverable_id);
+                                delete(ta.discipline_id);
+                                delete(ta.team_id);
+                                delete(ta.numberOfMembers);
+                                delete(ta.disciplineUuid);
+                                delete(ta['MAX(ta.addedDate)']);
+                            });
+                        }
+                    });
+                }
+            });
+
+            const filename = `${GeneralHelpers.convertTimeToHyphenatedDate(exportDate)}.json`;
+            const json = JSON.stringify(deliverablesToExport);
+
+            if(discord && this.AllowExportSnapshotsToDiscord) {
+                await GeneralHelpers.sendTextMessageFile([json], filename, msg);
+            } else {
+                // save to local directory
+                await fs.writeFile(path.join(__dirname, '..', 'data_exports', filename), json, () => {});
+            }
+        });
+        
+        msg.channel.send('Export complete.');
+    }
 
     //#region Helper methods
     /**

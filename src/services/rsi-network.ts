@@ -69,8 +69,10 @@ export default abstract class RSINetwork {
      * @param type The grpahql query type
      * @returns The response promise
      */
-    public static async getResponse(data: string, type: number): Promise<any> {
-        return await new Promise((resolve, reject) => { // TODO - Refactor code to require only a singe variable
+    public static async getResponse(data: string, type: number, delay: number = 0): Promise<any> {
+        //delay = 3.5 * delay; // rate limit the response further; 70ms prevents all timeouts I tested with, but takes 2 minutes to complete query
+        return await new Promise(async (resolve, reject) => { // TODO - Refactor code to require only a singe variable
+            await new Promise(res => setTimeout(res, delay));
             const req = https.request(this.options, (res) => {
               let returnData = '';
 
