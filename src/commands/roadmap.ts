@@ -185,10 +185,17 @@ export abstract class Roadmap {
             d.startDate = Date.parse(d.startDate);
             d.endDate = Date.parse(d.endDate);
             d.updateDate = Date.parse(d.updateDate);
+            d.title = _.unescape(d.title);
+            d.description = _.unescape(d.description);
             if(d.card) {
-                d.card.tid = d.card.id,
-                d.card.release_id = d.card.release.id;
-                d.card.release_title = d.card.release.title;
+                d.card.tid = d.card.id;
+                if(d.card.release) {
+                    d.card.release_id = d.card.release.id;
+                    d.card.release_title = d.card.release.title;
+                } else {
+                    d.card.release_id = d.card.release_id;
+                    d.card.release_title = d.card.release_title;
+                }
                 d.card.updateDate = Date.parse(d.card.updateDate);
                 delete(d.card.id);
             }
@@ -254,12 +261,14 @@ export abstract class Roadmap {
             if(teams) {
                 const disciplineProperties = ['numberOfMembers', 'title', 'disciplineUuid'];
                 teams.forEach((dt) => {
-                    const match = dbTeams.find(t => t.slug === dt.slug);
+                    const match = dbTeams.sort((a,b) => b.addedDate - a.addedDate).find(t => t.slug === dt.slug);
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
+                    const tChanges = tDiff.map(x => ({change: x.path && x.path[0], val: x.val})).filter(x => x.change !== 'timeAllocations');
                     let teamId = null;
-                    if(tDiff.length || !match) { // new or changed
-                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, Date.parse(dt.startDate), Date.parse(dt.endDate), now, dt.numberOfDeliverables, dt.slug]);
+                    if(tChanges.length || !match) { // new or changed
+                        const teamRow = teamsInsert.run([dt.abbreviation, dt.title, dt.description, Number(dt.startDate) ? dt.startDate : Date.parse(dt.startDate), Number(dt.endDate) ? dt.endDate : Date.parse(dt.endDate), now, dt.numberOfDeliverables, dt.slug]);
                         teamId = teamRow.lastInsertRowid;
+                        dbTeams.push({id: teamId, addedDate: now, ...dt});
                         if(justIds) {
                             rTeams.push(teamId);
                         } else {
@@ -934,6 +943,8 @@ export abstract class Roadmap {
                 d.startDate = GeneralHelpers.convertTimeToFullDate(d.startDate);
                 d.endDate = GeneralHelpers.convertTimeToFullDate(d.endDate);
                 d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
+                d.description = _.escape(d.description);
+                d.title = _.escape(d.title);
                 d.projects = [];
                 d.project_ids.split(',').forEach(pi => {
                     d.projects.push({title: pi === 'SC' ? 'Star Citizen' : 'Squadron 42'});
@@ -942,6 +953,10 @@ export abstract class Roadmap {
                 if(d.card) {
                     d.card.id = d.card.tid;
                     d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
+                    d.card.release = {
+                        id: d.card.release_id,
+                        title: d.card.release_title
+                    };
                     delete(d.card.addedDate);
                     delete(d.card.tid);
                 } else {
@@ -952,6 +967,8 @@ export abstract class Roadmap {
                     d.teams.forEach(t => {
                         delete(t.addedDate);
                         delete(t.id);
+                        t.startDate = GeneralHelpers.convertTimeToFullDate(t.startDate);
+                        t.endDate = GeneralHelpers.convertTimeToFullDate(t.endDate);
                         if(t.timeAllocations) {
                             t.timeAllocations.forEach(ta => {
                                 ta.startDate = GeneralHelpers.convertTimeToFullDate(ta.startDate);
