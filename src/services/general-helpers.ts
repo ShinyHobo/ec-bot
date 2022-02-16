@@ -136,8 +136,8 @@ export default abstract class GeneralHelpers {
     }
 
     /**
-     * Sends a long text message to Discord as a markdown file
-     * @param messages The messags to include in the file
+     * Sends a long text message to Discord as a file
+     * @param messages The messages to include in the file
      * @param filename The filename to use
      * @param msg The command message
      */

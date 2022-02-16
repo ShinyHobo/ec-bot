@@ -132,10 +132,7 @@ export abstract class Roadmap {
                                 const team = dMatch.teams.find(t => t.timeAllocations.some(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid)));
                                 const timeAllocations = team.timeAllocations.filter(ta => discipline.timeAllocations.some(dta => dta.uuid === ta.uuid));
 
-                                if(timeAllocations.length > 1) {
-                                    let sner = "";
-                                    let bler = sner;
-                                }
+                                // A given discipline is assigned to exactly one, unique time allocation
                                 timeAllocations.forEach(ta => {
                                     ta.discipline = discipline;
                                 });
@@ -913,13 +910,16 @@ export abstract class Roadmap {
             d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
             d.projects = [];
             d.project_ids.split(',').forEach(pi => {
-                d.projects.push({title: pi.title === 'SC' ? 'Star Citizen' : 'Squadron 42'});
+                d.projects.push({title: pi === 'SC' ? 'Star Citizen' : 'Squadron 42'});
             });
+            delete(d.project_ids);
             if(d.card) {
                 d.card.id = d.card.tid;
                 d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
                 delete(d.card.addedDate);
                 delete(d.card.tid);
+            } else {
+                d.card = null;
             }
             d.teams.forEach(t => {
                 delete(t.addedDate);
@@ -944,7 +944,12 @@ export abstract class Roadmap {
                 });
             });
         });
-        
+
+        if(discord) {
+            GeneralHelpers.sendTextMessageFile([JSON.stringify(deliverablesToExport)], `${GeneralHelpers.convertTimeToHyphenatedDate(exportDate)}.json`, msg);
+        } else {
+            // save to local directory
+        }
     }
 
     //#region Helper methods
