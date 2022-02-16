@@ -965,7 +965,7 @@ export abstract class Roadmap {
                 await GeneralHelpers.sendTextMessageFile([json], filename, msg);
             } else {
                 // save to local directory
-                await fs.writeFile(path.join(__dirname, '..', 'initialization_data', filename), json, () => {});
+                await fs.writeFile(path.join(__dirname, '..', 'data_exports', filename), json, () => {});
             }
         });
         
