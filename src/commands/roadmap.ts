@@ -32,6 +32,9 @@ export abstract class Roadmap {
         Delta: "Delta",
         Teams: "Teams"
     });
+
+    /** Set to true to allow the command to export to discord */
+    private static readonly AllowExportSnapshotsToDiscord = false;
     //#endregion
 
     /**
@@ -873,83 +876,100 @@ export abstract class Roadmap {
     //#endregion
 
     /**
-     * Converts database model to json and exports it as a file
-     * @param argv The argument array
+     * Converts database model(s) to json and exports them
+     * @param argv The argument array (-t YYYYMMDD for specific one or --all for all)
      * @param msg The command message
      * @param db The database connection
      * @param discord Whether to send the file to discord or to save locally
      */
-    private static exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
-        let exportDate: number = null;
+    private static async exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
+        let exportDates: number[] = [];
 
         const args = require('minimist')(argv.slice(1));
-
-        // select closest existing date prior to or on entered date
-        if(args['t'] && args['t'] !== true) {
-            if(Number(args['t'])) {
-                const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['t'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
-                exportDate = dbEnd && dbEnd.addedDate;
-            }
+            
+        if(args['all'] === true) {
+            exportDates = this.getDeliverableDeltaDateList(db);
         } else {
-            const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
-            exportDate = dbEnd && dbEnd.addedDate;
-        }
-        
-        if(!exportDate) {
-            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
-        }
-
-        const deliverablesToExport = this.buildDeliverables(exportDate, db, true);
-        deliverablesToExport.forEach(d => { // strip added fields
-            delete(d.id);
-            delete(d.card_id);
-            delete(d.addedDate);
-            delete(d.max);
-            d.startDate = GeneralHelpers.convertTimeToFullDate(d.startDate);
-            d.endDate = GeneralHelpers.convertTimeToFullDate(d.endDate);
-            d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
-            d.projects = [];
-            d.project_ids.split(',').forEach(pi => {
-                d.projects.push({title: pi === 'SC' ? 'Star Citizen' : 'Squadron 42'});
-            });
-            delete(d.project_ids);
-            if(d.card) {
-                d.card.id = d.card.tid;
-                d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
-                delete(d.card.addedDate);
-                delete(d.card.tid);
+            // select closest existing date prior to or on entered date
+            if(args['t'] && args['t'] !== true) {
+                if(Number(args['t'])) {
+                    const dbEnd = db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate <= ${GeneralHelpers.convertDateToTime(args['t'].toString())} ORDER BY addedDate DESC LIMIT 1`).get();
+                    exportDates.push(dbEnd && dbEnd.addedDate);
+                }
             } else {
-                d.card = null;
+                const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+                exportDates.push(dbEnd && dbEnd.addedDate);
             }
-            d.teams.forEach(t => {
-                delete(t.addedDate);
-                delete(t.id);
-                t.timeAllocations.forEach(ta => {
-                    ta.startDate = GeneralHelpers.convertTimeToFullDate(ta.startDate);
-                    ta.endDate = GeneralHelpers.convertTimeToFullDate(ta.endDate);
-                    ta.discipline = {
-                        title: ta.title,
-                        numberOfMembers: ta.numberOfMembers,
-                        uuid: ta.disciplineUuid
-                    };
-                    delete(ta.title);
-                    delete(ta.addedDate);
-                    delete(ta.id);
-                    delete(ta.deliverable_id);
-                    delete(ta.discipline_id);
-                    delete(ta.team_id);
-                    delete(ta.numberOfMembers);
-                    delete(ta.disciplineUuid);
-                    delete(ta['MAX(ta.addedDate)']);
-                });
-            });
-        });
 
-        if(discord) {
-            GeneralHelpers.sendTextMessageFile([JSON.stringify(deliverablesToExport)], `${GeneralHelpers.convertTimeToHyphenatedDate(exportDate)}.json`, msg);
-        } else {
-            // save to local directory
+            if(!exportDates.length) {
+                return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+            }
         }
+
+        await exportDates.forEach(async (exportDate) => {
+            const deliverablesToExport = this.buildDeliverables(exportDate, db, true);
+            deliverablesToExport.forEach(d => { // strip added fields
+                delete(d.id);
+                delete(d.card_id);
+                delete(d.addedDate);
+                delete(d.max);
+                d.startDate = GeneralHelpers.convertTimeToFullDate(d.startDate);
+                d.endDate = GeneralHelpers.convertTimeToFullDate(d.endDate);
+                d.updateDate = GeneralHelpers.convertTimeToFullDate(d.updateDate);
+                d.projects = [];
+                d.project_ids.split(',').forEach(pi => {
+                    d.projects.push({title: pi === 'SC' ? 'Star Citizen' : 'Squadron 42'});
+                });
+                delete(d.project_ids);
+                if(d.card) {
+                    d.card.id = d.card.tid;
+                    d.card.updateDate = GeneralHelpers.convertTimeToFullDate(d.card.updateDate);
+                    delete(d.card.addedDate);
+                    delete(d.card.tid);
+                } else {
+                    d.card = null;
+                }
+
+                if(d.teams) {
+                    d.teams.forEach(t => {
+                        delete(t.addedDate);
+                        delete(t.id);
+                        if(t.timeAllocations) {
+                            t.timeAllocations.forEach(ta => {
+                                ta.startDate = GeneralHelpers.convertTimeToFullDate(ta.startDate);
+                                ta.endDate = GeneralHelpers.convertTimeToFullDate(ta.endDate);
+                                ta.discipline = {
+                                    title: ta.title,
+                                    numberOfMembers: ta.numberOfMembers,
+                                    uuid: ta.disciplineUuid
+                                };
+                                delete(ta.title);
+                                delete(ta.addedDate);
+                                delete(ta.id);
+                                delete(ta.deliverable_id);
+                                delete(ta.discipline_id);
+                                delete(ta.team_id);
+                                delete(ta.numberOfMembers);
+                                delete(ta.disciplineUuid);
+                                delete(ta['MAX(ta.addedDate)']);
+                            });
+                        }
+                    });
+                }
+            });
+
+            const filename = `${GeneralHelpers.convertTimeToHyphenatedDate(exportDate)}.json`;
+            const json = JSON.stringify(deliverablesToExport);
+
+            if(discord && this.AllowExportSnapshotsToDiscord) {
+                await GeneralHelpers.sendTextMessageFile([json], filename, msg);
+            } else {
+                // save to local directory
+                await fs.writeFile(path.join(__dirname, '..', 'initialization_data', filename), json, () => {});
+            }
+        });
+        
+        msg.channel.send('Export complete.');
     }
 
     //#region Helper methods
