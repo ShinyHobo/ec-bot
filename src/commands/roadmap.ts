@@ -655,24 +655,34 @@ export abstract class Roadmap {
                         if(dChanges.some(p => p.change === 'teams')) {
                             const teamChangesToDetect = ['startDate', 'endDate'];
                             l.teams.forEach(lt => { // added/modified
-                                const lDiff = lt.endDate - lt.startDate;
+                                //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelavant for deliverable based deltas
+                                const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
+                                const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
+                                const lDiff = assignedEnd - assignedStart;
                                 const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
                                 if(teamMatch) {
                                     const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
                                     const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
                                         
                                     if(tChanges.length) {
-                                        const tmDiff = teamMatch.endDate - teamMatch.startDate;
+                                        //const tmDiff = teamMatch.endDate - teamMatch.startDate; // total timespan for team; irrelavant for deliverable based deltas
+                                        const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
+                                        const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
+                                        const tmDiff = tmAssignedEnd - tmAssignedStart;
                                         const timeDiff = lDiff - tmDiff; // positive is more work
                                         const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
     
                                         if(dayDiff) {
-                                            update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                            if(tmDiff === 0 && dayDiff > 0) {
+                                                update += `* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`;
+                                            } else {
+                                                update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                            }
                                         }
                                     }
                                 } else {
                                     const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
-                                    update += `* ${lt.title} was assigned ${dayDiff} days of work  \n`;
+                                    update += `* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`;
                                 }
                             });
 
@@ -1092,7 +1102,7 @@ export abstract class Roadmap {
 
         const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         
-        const dbDeliverableTeams = db.prepare(`SELECT *, MAX(addedDate) FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) GROUP BY slug ORDER BY addedDate DESC`).all();
+        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) ORDER BY addedDate DESC`).all();
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid, ta.addedDate AS time_added FROM timeAllocation_diff AS ta LEFT JOIN discipline_diff AS di ON di.id = ta.discipline_id`+
