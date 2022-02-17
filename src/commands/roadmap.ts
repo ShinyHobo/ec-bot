@@ -571,7 +571,13 @@ export abstract class Roadmap {
                                 timeSpan += ds.endDate - ds.startDate;
                             });
                             const load = Math.round(100 * this.calculateTaskLoad({numberOfMembers: ds[0].numberOfMembers, fullTime: fullTime, partTime: partTime, startDate: 0, endDate: timeSpan}));
-                            messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} with ${partTime + fullTime} tasks (${load}% load)  \n`); 
+                            const tasks = partTime + fullTime;
+                            const devs = 'dev' + (ds.numberOfMembers>1?'s':'');
+                            if(tasks) {
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${devs} with ${tasks} tasks (${load}% load)  \n`); 
+                            } else {
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${devs} previously completed all available tasks  \n`); 
+                            }
                         });
                     });
                     messages.push('  \n');
