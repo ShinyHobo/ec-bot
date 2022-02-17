@@ -146,7 +146,7 @@ export default abstract class GeneralHelpers {
      * @param filename The filename to use
      * @param msg The command message
      */
-    public static sendTextMessageFile(messages: string[], filename: string, msg: Message) {
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), filename)]}).catch(console.error);
+    public static async sendTextMessageFile(messages: string[], filename: string, msg: Message, unescape: boolean = true) {
+        await msg.channel.send({files: [new MessageAttachment(Buffer.from(unescape ? _.unescape(messages.join('')) : messages.join(''), "utf-8"), filename)]}).catch(console.error);
     }
 }

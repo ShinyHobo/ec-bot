@@ -1064,14 +1064,16 @@ export abstract class Roadmap {
             const json = JSON.stringify(deliverablesToExport);
 
             if(discord && this.AllowExportSnapshotsToDiscord) {
-                await GeneralHelpers.sendTextMessageFile([json], filename, msg);
+                await GeneralHelpers.sendTextMessageFile([json], filename, msg, false);
             } else {
                 // save to local directory
                 await fs.writeFile(path.join(__dirname, '..', 'data_exports', filename), json, () => {});
             }
         });
         
-        msg.channel.send('Export complete.');
+        if(!discord) {
+            await msg.channel.send('Export complete.');
+        }
     }
 
     //#region Helper methods
