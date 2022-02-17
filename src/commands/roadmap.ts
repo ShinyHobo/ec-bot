@@ -703,7 +703,7 @@ export abstract class Roadmap {
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
-                                update.splice(1,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`);
+                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`);
                             } else {
                                 update.splice(0,0,`### **${title.trim()}** ###  \n`);
                             }
