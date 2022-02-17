@@ -521,7 +521,7 @@ export abstract class Roadmap {
 
                 if(dMatch.teams) {
                     const freedTeams = dMatch.teams.map(t => t.title);
-                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${freedTeams.join(', ')}`));
+                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${_.uniq(freedTeams).join(', ')}`));
                     // TODO - Add how many devs have been freed up for each discipline
                 }
 
@@ -600,16 +600,8 @@ export abstract class Roadmap {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
                     const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
                     
+                    let update = [];
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
-                        const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                        let update = `### **${title.trim()}** ###  \n`;
-
-                        if(args['publish']) {
-                            update = `### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`;
-                        }
-                        
-                        update += `*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`;
-
                         if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
                             const oldDateText = oldDate.toDateString();
@@ -625,7 +617,7 @@ export abstract class Roadmap {
                                 updateText = "pushed back";
                             }
 
-                            update += `\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
+                            update.push(`\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
                         }
                         if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
@@ -642,23 +634,27 @@ export abstract class Roadmap {
                                 updateText = "moved closer";
                             }
 
-                            update += `\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`;
+                            update.push(`\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
-                            update += GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`);
+                            update.push(GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`));
                         }
                         if(dChanges.some(p => p.change === 'description')) {
-                            update += GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`);
+                            update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
                         }
 
+                        let teamsChanged = false;
                         if(dChanges.some(p => p.change === 'teams')) {
                             const teamChangesToDetect = ['startDate', 'endDate'];
                             l.teams.forEach(lt => { // added/modified
-                                //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelavant for deliverable based deltas
+                                teamsChanged = true;
+                                //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelevant for deliverable based deltas
                                 const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
                                 const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
-                                const lDiff = assignedEnd - assignedStart;
+                                //const lDiff = assignedEnd - assignedStart; // total timespan for team, adjusted for assigned time allocations; 
+                                const lDiff = GeneralHelpers.mergeDateRanges(lt.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
+
                                 const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
                                 if(teamMatch) {
                                     const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
@@ -666,23 +662,24 @@ export abstract class Roadmap {
                                         
                                     if(tChanges.length) {
                                         //const tmDiff = teamMatch.endDate - teamMatch.startDate; // total timespan for team; irrelavant for deliverable based deltas
-                                        const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
-                                        const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
-                                        const tmDiff = tmAssignedEnd - tmAssignedStart;
+                                        //const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
+                                        //const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
+                                        //const tmDiff = tmAssignedEnd - tmAssignedStart; // total timespan for team, adjusted for assigned time allocations; 
+                                        const tmDiff = GeneralHelpers.mergeDateRanges(teamMatch.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
                                         const timeDiff = lDiff - tmDiff; // positive is more work
                                         const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
     
                                         if(dayDiff) {
                                             if(tmDiff === 0 && dayDiff > 0) {
-                                                update += `* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`;
+                                                update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`);
                                             } else {
-                                                update += `* ${lt.title} ${dayDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`;
+                                                update.push(`* ${lt.title} ${timeDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`);
                                             }
                                         }
                                     }
                                 } else {
                                     const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
-                                    update += `* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`;
+                                    update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`);
                                 }
                             });
 
@@ -692,21 +689,32 @@ export abstract class Roadmap {
                                 removedTeams.forEach(rt => {
                                     const rtDiff = rt.endDate - rt.startDate;
                                     const dayDiff = GeneralHelpers.convertMillisecondsToDays(rtDiff);
-                                    update += `* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`;
+                                    update.push(`* ${rt.title} was removed, freeing up ${dayDiff} days of work  \n`);
                                 });
                             }
                         }
 
-                        updatedMessages.push(he.unescape(update + '  \n'));
+                        if(update.length) {
+                            const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
+                            update.splice(0,0,`### **${title.trim()}** ###  \n`);
+
+                            if(args['publish']) {
+                                update.splice(1,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`);
+                            }
+                            
+                            update.splice(1,0,`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
+
+                            updatedMessages.push(he.unescape(update.join('') + '  \n'));
                         
-                        if(f.card && !l.card) {
-                            updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
-                        } else if(l.card) {
-                            updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
+                            if(f.card && !l.card) {
+                                updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
+                            } else if(l.card) {
+                                updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
+                            }
+                            
+                            updatedDeliverables.push(f);
+                            changes.updated++;
                         }
-                        
-                        updatedDeliverables.push(f);
-                        changes.updated++;
                     }
                 }
             });
@@ -1105,8 +1113,8 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) ORDER BY addedDate DESC`).all();
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
-        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid, ta.addedDate AS time_added FROM timeAllocation_diff AS ta LEFT JOIN discipline_diff AS di ON di.id = ta.discipline_id`+
-        ` WHERE deliverable_id IN (${deliverableIds}) AND team_id IN (${dbDeliverableTeams.map(z => z.id).join(',')}) GROUP BY ta.uuid`).all();
+        let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid, ta.addedDate AS time_added FROM timeAllocation_diff AS ta JOIN discipline_diff AS di ON di.id = ta.discipline_id`+
+        ` WHERE deliverable_id IN (${deliverableIds}) AND team_id IN (${dbDeliverableTeams.map(z => z.id).join(',')}) AND partialTime IS NOT NULL GROUP BY ta.uuid`).all();
         let teamIds = dbTimeAllocations.map(z => z.team_id).filter((value, index, self) => self.indexOf(value) === index);
         dbTimeAllocations.forEach(ta => {
             ta.disciplineUuid = ta.uuid;

@@ -80,6 +80,9 @@ export default abstract class GeneralHelpers {
      * @returns The merged date ranges
      */
     public static mergeDateRanges(ranges) {
+        if(!ranges) {
+            return [];
+        }
         ranges = ranges.sort((a,b) => a.startDate - b.startDate);
 
         let returnRanges = [];
@@ -104,8 +107,10 @@ export default abstract class GeneralHelpers {
                 currentRange = r;
             } else if (currentRange.endDate < r.endDate) {
                 currentRange.endDate = r.endDate;
-                currentRange.partTime += r.partTime;
-                currentRange.fullTime += r.fullTime;
+                currentRange.partTime = typeof currentRange.partTime == 'number' ? currentRange.partTime : 0;
+                currentRange.fullTime = typeof currentRange.fullTime == 'number' ? currentRange.fullTime : 0;
+                currentRange.partTime += r.partialTime;
+                currentRange.fullTime += Math.abs(1 - r.partialTime);
             }
         });
 
