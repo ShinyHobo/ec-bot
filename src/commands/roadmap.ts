@@ -675,7 +675,7 @@ export abstract class Roadmap {
                                         if(dayDiff) {
                                             if(tmDiff === 0 && dayDiff > 0) {
                                                 update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${displayDays} days of work  \n`);
-                                            } else {
+                                            } else if(displayDays > 0) {
                                                 update.push(`* ${lt.title} ${timeDiff > 0 ? "added":"freed up"} ${displayDays} days of work  \n`);
                                             }
                                         }
