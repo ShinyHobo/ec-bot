@@ -646,7 +646,7 @@ export abstract class Roadmap {
 
                         let teamsChanged = false;
                         if(dChanges.some(p => p.change === 'teams')) {
-                            const teamChangesToDetect = ['startDate', 'endDate'];
+                            const teamChangesToDetect = ['startDate', 'endDate', 'timeAllocations']; // possible for start and end to remain the same while having shifting time allocations
                             l.teams.forEach(lt => { // added/modified
                                 teamsChanged = true;
                                 //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelevant for deliverable based deltas
@@ -662,24 +662,30 @@ export abstract class Roadmap {
                                         
                                     if(tChanges.length) {
                                         //const tmDiff = teamMatch.endDate - teamMatch.startDate; // total timespan for team; irrelavant for deliverable based deltas
-                                        //const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
-                                        //const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
+                                        const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
+                                        const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
                                         //const tmDiff = tmAssignedEnd - tmAssignedStart; // total timespan for team, adjusted for assigned time allocations; 
                                         const tmDiff = GeneralHelpers.mergeDateRanges(teamMatch.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
                                         const timeDiff = lDiff - tmDiff; // positive is more work
                                         const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
+                                        const tmDaysRemaining = GeneralHelpers.convertMillisecondsToDays(tmAssignedEnd - (compareTime < tmAssignedStart ? tmAssignedStart : compareTime));
+                                        const extraDays = dayDiff - tmDaysRemaining;
+                                        const displayDays = extraDays < 0 ? dayDiff : tmDaysRemaining;
     
                                         if(dayDiff) {
                                             if(tmDiff === 0 && dayDiff > 0) {
-                                                update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`);
+                                                update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${displayDays} days of work  \n`);
                                             } else {
-                                                update.push(`* ${lt.title} ${timeDiff > 0 ? "added":"freed up"} ${dayDiff} days of work  \n`);
+                                                update.push(`* ${lt.title} ${timeDiff > 0 ? "added":"freed up"} ${displayDays} days of work  \n`);
                                             }
                                         }
                                     }
                                 } else {
+                                    const daysRemaining = GeneralHelpers.convertMillisecondsToDays(assignedEnd - compareTime);
                                     const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
-                                    update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${dayDiff} days of work  \n`);
+                                    //const displayDays = daysRemaining > dayDiff ? dayDiff : daysRemaining;
+                                    const extraDays = dayDiff - daysRemaining;
+                                    update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${extraDays < 0 ? dayDiff : extraDays} days of work  \n`);
                                 }
                             });
 
@@ -725,6 +731,8 @@ export abstract class Roadmap {
             const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
             messages.splice(1,0,GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
+            // TODO - tldr here
+
             if(args['publish']) {
                 messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
             }
@@ -749,7 +757,7 @@ export abstract class Roadmap {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
                     const changesToDetect = ['title','description', 'category', 'release_title'];
                     dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
-                        messages.push(`* Release ${_.capitalize(dc.change)} has been changed from ${oldDeliverable[dc.change]} to ${deliverable[dc.change]}  \n`);
+                        messages.push(GeneralHelpers.shortenText(`* Release ${_.capitalize(dc.change)} has been changed from  \n'${oldDeliverable.card[dc.change]}'  \nto '${deliverable.card[dc.change]}'  \n`));
                     });
                 }
             }
