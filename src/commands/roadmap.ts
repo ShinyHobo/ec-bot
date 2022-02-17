@@ -507,7 +507,7 @@ export abstract class Roadmap {
         const compareTime = Date.now();
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
-        messages.push(`# Progress Report Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        messages.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         messages.push('---  \n\n');
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
@@ -734,7 +734,7 @@ export abstract class Roadmap {
             // TODO - tldr here
 
             if(args['publish']) {
-                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Progress Report Delta"), ...messages];
+                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
             }
         }
 
