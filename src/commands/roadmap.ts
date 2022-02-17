@@ -521,7 +521,7 @@ export abstract class Roadmap {
 
                 if(dMatch.teams) {
                     const freedTeams = dMatch.teams.map(t => t.title);
-                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${_.uniq(freedTeams).join(', ')}`));
+                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${_.uniq(freedTeams).join(', ')}  \n`));
                     // TODO - Add how many devs have been freed up for each discipline
                 }
 
@@ -702,10 +702,10 @@ export abstract class Roadmap {
 
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
-                            update.splice(0,0,`### **${title.trim()}** ###  \n`);
-
                             if(args['publish']) {
                                 update.splice(1,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`);
+                            } else {
+                                update.splice(0,0,`### **${title.trim()}** ###  \n`);
                             }
                             
                             update.splice(1,0,`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
