@@ -196,4 +196,17 @@ export default abstract class RSINetwork {
 
         return JSON.stringify(query);
     }
+
+    /**
+     * Returns html imgs for each project a deliverable belongs to
+     * @param deliverable The deliverable to lookup project icons from
+     * @returns The list of project icons imgs
+     */
+    public static generateProjectIcons(deliverable: any): string {
+        let projectIcons = "";
+        deliverable.project_ids.split(',').forEach(p => {
+            projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
+        });
+        return projectIcons;
+    }
 }

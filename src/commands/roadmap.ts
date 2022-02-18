@@ -515,7 +515,7 @@ export abstract class Roadmap {
             messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
             removedDeliverables.forEach(d => {
                 const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
-                messages.push(he.unescape(`### **${d.title.trim()}** ###  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}** ${RSINetwork.generateProjectIcons(d)} ###  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
 
@@ -543,7 +543,7 @@ export abstract class Roadmap {
                 const start = new Date(d.startDate).toDateString();
                 const end = new Date(d.endDate).toDateString();
                 if(args['publish']) {
-                    messages.push(he.unescape(`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ###  \n`.toString()));
+                    messages.push(he.unescape(`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ${RSINetwork.generateProjectIcons(d)} ###  \n`.toString()));
                 } else {
                     messages.push(he.unescape(`### **${d.title.trim()}**${dMatch?` (returning!)`:''} ###  \n`.toString()));
                 }
@@ -703,11 +703,7 @@ export abstract class Roadmap {
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
-                                let projectIcons = ""; // TODO - consolodate code; this is used in multiple places
-                                l.project_ids.split(',').forEach(p => {
-                                    projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
-                                });
-                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ${projectIcons} ###  \n`);
+                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(l)} ###  \n`);
                             } else {
                                 update.splice(0,0,`### **${title.trim()}** ###  \n`);
                             }
@@ -873,11 +869,7 @@ export abstract class Roadmap {
             const schedules = groupedTasks[d.id];
             const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
             if(publish) {
-                let projectIcons = '';
-                d.project_ids.split(',').forEach(p => {
-                    projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
-                });
-                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>** ${projectIcons} ###  \n`);
+                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
             } else {
                 messages.push(`  \n### **${d.title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
             }
