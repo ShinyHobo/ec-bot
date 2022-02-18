@@ -559,24 +559,11 @@ export abstract class Roadmap {
 
                         const disciplineSchedules = _._(t.timeAllocations).groupBy('title').map(v=>v).value();
                         disciplineSchedules.forEach(ds => {
-                            let partTime = 0;
-                            let fullTime = 0;
-                            let timeSpan = 0;
-                            ds.filter(v => d.updateDate < v.endDate).forEach(ds => {
-                                if(ds.partialTime) {
-                                    partTime++;
-                                } else {
-                                    fullTime++;
-                                }
-                                timeSpan += ds.endDate - ds.startDate;
-                            });
-                            const load = Math.round(100 * this.calculateTaskLoad({numberOfMembers: ds[0].numberOfMembers, fullTime: fullTime, partTime: partTime, startDate: 0, endDate: timeSpan}));
-                            const tasks = partTime + fullTime;
-                            const devs = 'dev' + (ds.numberOfMembers>1?'s':'');
-                            if(tasks) {
-                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${devs} with ${tasks} tasks (${load}% load)  \n`); 
+                            const lLoad = this.generateLoad(ds, compareTime, d);
+                            if(lLoad.tasks) {
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} tasks (${lLoad.load}% load)  \n`); 
                             } else {
-                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${devs} previously completed all available tasks  \n`); 
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} previously completed all available tasks  \n`); 
                             }
                         });
                     });
@@ -627,7 +614,7 @@ export abstract class Roadmap {
 
                             let updateText = "";
                             if((compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) || (compareTime > Date.parse(oldDateText) && newDate < oldDate)) {
-                                updateText = "moved earlier (time allocation removal(s) likely)  \n"; // likely team time allocation was removed, but could have finished early
+                                updateText = "moved earlier (time allocation removal(s) or priority up likely)  \n"; // likely team time allocation was removed, but could have finished early
                             } else if(oldDate < newDate) {
                                 updateText = "been extended";
                             } else if(newDate < oldDate) {
@@ -644,17 +631,16 @@ export abstract class Roadmap {
                             update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
                         }
 
-                        let teamsChanged = false;
                         if(dChanges.some(p => p.change === 'teams')) {
                             const teamChangesToDetect = ['startDate', 'endDate', 'timeAllocations']; // possible for start and end to remain the same while having shifting time allocations
                             l.teams.forEach(lt => { // added/modified
-                                teamsChanged = true;
                                 //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelevant for deliverable based deltas
                                 const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
                                 const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
                                 //const lDiff = assignedEnd - assignedStart; // total timespan for team, adjusted for assigned time allocations; 
                                 const lDiff = GeneralHelpers.mergeDateRanges(lt.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
 
+                                let showDisciplines = false;
                                 const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
                                 if(teamMatch) {
                                     const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
@@ -675,8 +661,10 @@ export abstract class Roadmap {
                                         if(dayDiff) {
                                             if(tmDiff === 0 && dayDiff > 0) {
                                                 update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${displayDays} days of work  \n`);
+                                                showDisciplines = true;
                                             } else if(displayDays > 0) {
                                                 update.push(`* ${lt.title} ${timeDiff > 0 ? "added":"freed up"} ${displayDays} days of work  \n`);
+                                                showDisciplines = true;
                                             }
                                         }
                                     }
@@ -686,6 +674,20 @@ export abstract class Roadmap {
                                     //const displayDays = daysRemaining > dayDiff ? dayDiff : daysRemaining;
                                     const extraDays = dayDiff - daysRemaining;
                                     update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${extraDays < 0 ? dayDiff : extraDays} days of work  \n`);
+                                    showDisciplines = true;
+                                }
+
+                                if(showDisciplines) {
+                                    const lDisciplineSchedules = _._(lt.timeAllocations).groupBy('title').map(v=>v).value();
+                                    const fDisciplineSchedules = teamMatch ? _._(teamMatch.timeAllocations).groupBy('title').map(v=>v).value() : [];
+                                    lDisciplineSchedules.forEach(ds => {
+                                        const matchDisciplineSchedule = fDisciplineSchedules.find(fds => fds[0].title === ds[0].title);
+                                        const fLoad = matchDisciplineSchedule ? this.generateLoad(matchDisciplineSchedule, compareTime, f) : false;
+                                        const lLoad = this.generateLoad(ds, compareTime, l);
+                                        if(lLoad.tasks) {
+                                            update.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} tasks (${fLoad && fLoad.load && fLoad.load !== lLoad.load ? `${fLoad.load}% to ` : ''}${lLoad.load}% load)  \n`); 
+                                        }
+                                    });
                                 }
                             });
 
@@ -701,16 +703,17 @@ export abstract class Roadmap {
                         }
 
                         if(update.length) {
+                            const deltaHeader = [];
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
-                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(l)} ###  \n`);
+                                deltaHeader.push(`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(l)} ###  \n`);
                             } else {
-                                update.splice(0,0,`### **${title.trim()}** ###  \n`);
+                                deltaHeader.push(`### **${title.trim()}** ###  \n`);
                             }
                             
-                            update.splice(1,0,`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
+                            deltaHeader.push(`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
 
-                            updatedMessages.push(he.unescape(update.join('') + '  \n'));
+                            updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
                         
                             if(f.card && !l.card) {
                                 updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
@@ -944,7 +947,7 @@ export abstract class Roadmap {
                 
                 // descriptions for the current weeks in descending order of display
                 timelines.push(`<ul>`);
-                matchMergedSchedules.forEach((ms, msi) => {
+                matchMergedSchedules.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
                     timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
@@ -1085,6 +1088,34 @@ export abstract class Roadmap {
         //const taskMemberRatio = (schedule.fullTime + schedule.partTime * .5) / schedule.numberOfMembers;
         //const weightedTaskAverage = (schedule.fullTime + schedule.partTime * .5) / (schedule.fullTime + schedule.partTime);
         return scheduleLoad / teamCapacity;
+    }
+
+    /**
+     * Calculates and returns load, tasks, and developers for a given deliverable
+     * @param disciplineSchedule The list of time allocations tied to a given discipline
+     * @param compareTime The time in ms that is being compared to, generally when the report is run
+     * @param deliverable The deliverable the discipline schedules belong to
+     * @returns The load estimation, number of tasks, and the correct plural of 'dev'
+     */
+    public static generateLoad(disciplineSchedule: any[any], compareTime: number, deliverable): any[any] {
+        let partTime = 0;
+        let fullTime = 0;
+        let timeSpan = 0;
+        disciplineSchedule.filter(v => deliverable.updateDate < v.endDate).forEach(ds => {
+            if(ds.partialTime) {
+                partTime++;
+            } else {
+                fullTime++;
+            }
+            timeSpan += ds.endDate - ds.startDate;
+        });
+        let load = Math.round(100 * this.calculateTaskLoad({numberOfMembers: disciplineSchedule[0].numberOfMembers, fullTime: fullTime, partTime: partTime, startDate: 0, endDate: timeSpan}));
+        const tasks = partTime + fullTime;
+        const devs = 'dev' + (disciplineSchedule.numberOfMembers>1?'s':'');
+        if(!Number(load)) {
+            load = 0;
+        }
+        return {load: load, tasks: tasks, devs: devs};
     }
 
     /**
