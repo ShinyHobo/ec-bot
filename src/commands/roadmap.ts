@@ -1114,7 +1114,7 @@ export abstract class Roadmap {
         });
         let load = Math.round(100 * this.calculateTaskLoad({numberOfMembers: disciplineSchedule[0].numberOfMembers, fullTime: fullTime, partTime: partTime, startDate: 0, endDate: timeSpan}));
         const tasks = partTime + fullTime;
-        const devs = 'dev' + (disciplineSchedule.numberOfMembers>1?'s':'');
+        const devs = 'dev' + (disciplineSchedule[0].numberOfMembers>1?'s':'');
         if(!Number(load)) {
             load = 0;
         }
