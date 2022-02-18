@@ -507,9 +507,6 @@ export abstract class Roadmap {
         const compareTime = Date.now();
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
-        messages.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
-        messages.push('---  \n\n');
-
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
         if(removedDeliverables.length) {
             messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
@@ -578,8 +575,8 @@ export abstract class Roadmap {
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid));
         let updatedDeliverables = [];
+        let updatedMessages = [];
         if(remainingDeliverables.length) {
-            let updatedMessages = [];
             remainingDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
@@ -730,18 +727,45 @@ export abstract class Roadmap {
                     }
                 }
             });
-            messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
-            messages = messages.concat(updatedMessages);
-            messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
-            
-            const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
-            messages.splice(1,0,GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+        }
 
-            // TODO - tldr here
+        messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
+        messages = messages.concat(updatedMessages);
+        messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
+        
+        const tldr = [];
 
-            if(args['publish']) {
-                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
-            }
+        tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
+        tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+
+        tldr.push('---  \n\n');
+
+        const scheduledDeliverables = last.filter(l => l.endDate > compareTime);
+        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta))).groupBy('deliverable_id').map(v => v).value();
+        tldr.push(GeneralHelpers.shortenText(`There are currently ${deliverableTimes.length} scheduled deliverables.  \n`));
+        
+        const deliverableRanks = [];
+        deliverableTimes.forEach(dt => {
+            let time = 0;
+            dt.forEach(t => {
+                time += t.endDate - t.startDate;
+            });
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time});
+        });
+        const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,10);
+        tldr.push(GeneralHelpers.shortenText('The top ten highest currently scheduled tasks are (in man-days):  '));
+        topTenTimes.forEach(ttt => {
+            const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
+            tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time)} - ${matchDeliverable.title}`));
+        });
+
+        tldr.push('  \n---  \n\n');
+
+        messages = [...tldr, ...messages];
+
+        if(args['publish']) {
+            messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
         }
 
         GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, msg);
@@ -860,7 +884,7 @@ export abstract class Roadmap {
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
             'each time period. Deliverable time allocations are often staggered over their total lifespan and have multiple devs in the same department working in parallel, but their allocations are obviously not going to be equal.';
-        const outroDesc = "The load calculation is an approximation based on the sum of the part-time and full-time tasks (averaged at 80 hours to complete a piece) divided by the team capacity (with a focus factor of 60%) over the given time period. "+
+        const outroDesc = "  \nThe load calculation is an approximation based on the sum of the part-time and full-time tasks (averaged at 80 hours to complete a piece) divided by the team capacity (with a focus factor of 60%) over the given time period. "+
             "Without exact hourly estimates for each task, a more accurate assessment doesn't seem likely, so interpret the load as a given dev group's general utilization on a deliverable.";
         if(publish) {
             messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
