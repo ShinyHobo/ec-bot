@@ -750,14 +750,14 @@ export abstract class Roadmap {
             let time = 0;
             const members = [];
             dt.forEach(ta => {
-                time += ta.endDate - ta.startDate;
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
                 members[ta.title] = ta.numberOfMembers;
             });
             const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a, 0);
             deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, members: totalMembers});
         });
         const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
-        tldr.push(GeneralHelpers.shortenText('The top fifteen highest, currently scheduled tasks are (in man-days):  '));
+        tldr.push(GeneralHelpers.shortenText('The top fifteen highest, currently scheduled tasks are (in estimated man-days):  '));
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
             tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time)} - ${matchDeliverable.title}`));
