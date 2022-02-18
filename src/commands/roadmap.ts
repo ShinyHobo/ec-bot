@@ -685,7 +685,10 @@ export abstract class Roadmap {
                                         const fLoad = matchDisciplineSchedule ? this.generateLoad(matchDisciplineSchedule, compareTime, f) : false;
                                         const lLoad = this.generateLoad(ds, compareTime, l);
                                         if(lLoad.tasks) {
-                                            update.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} tasks (${fLoad && fLoad.load && fLoad.load !== lLoad.load ? `${fLoad.load}% to ` : ''}${lLoad.load}% load)  \n`); 
+                                            update.push(`x${`${matchDisciplineSchedule && matchDisciplineSchedule[0].numberOfMembers && 
+                                            matchDisciplineSchedule[0].numberOfMembers !== ds[0].numberOfMembers ? `${matchDisciplineSchedule[0].numberOfMembers} => ` : ''}`+
+                                            `${ds[0].numberOfMembers}`} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} `+
+                                            `tasks (${fLoad && fLoad.load && fLoad.load !== lLoad.load ? `${fLoad.load}% => ` : ''}${lLoad.load}% load)  \n`); 
                                         }
                                     });
                                 }
@@ -737,7 +740,7 @@ export abstract class Roadmap {
             // TODO - tldr here
 
             if(args['publish']) {
-                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
+                messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
             }
         }
 
