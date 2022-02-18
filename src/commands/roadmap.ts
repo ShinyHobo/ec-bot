@@ -703,7 +703,11 @@ export abstract class Roadmap {
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
-                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ###  \n`);
+                                let projectIcons = ""; // TODO - consolodate code; this is used in multiple places
+                                l.project_ids.split(',').forEach(p => {
+                                    projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
+                                });
+                                update.splice(0,0,`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${l.slug}" target="_blank">${title.trim()}</a>** ${projectIcons} ###  \n`);
                             } else {
                                 update.splice(0,0,`### **${title.trim()}** ###  \n`);
                             }
