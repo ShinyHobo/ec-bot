@@ -626,7 +626,7 @@ export abstract class Roadmap {
                             const newDateText = newDate.toDateString();
 
                             let updateText = "";
-                            if(compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) {
+                            if((compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) || (compareTime > Date.parse(oldDateText) && newDate < oldDate)) {
                                 updateText = "moved earlier (time allocation removal(s) likely)  \n"; // likely team time allocation was removed, but could have finished early
                             } else if(oldDate < newDate) {
                                 updateText = "been extended";
