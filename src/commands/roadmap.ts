@@ -504,7 +504,7 @@ export abstract class Roadmap {
         const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
 
         let messages = [];
-        const compareTime = Date.now();
+        const compareTime = end;
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced"))));
@@ -760,7 +760,7 @@ export abstract class Roadmap {
         tldr.push(GeneralHelpers.shortenText('The top fifteen highest, currently scheduled tasks are (in estimated man-days):  '));
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time)} - ${matchDeliverable.title}`));
+            tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title}`)); // Divide by three to break into 8 hour segments
         });
 
         tldr.push(GeneralHelpers.shortenText('  \nThe top fifteen highest, currently scheduled tasks are (in assigned devs):  '));
