@@ -742,22 +742,32 @@ export abstract class Roadmap {
         tldr.push('---  \n\n');
 
         const scheduledDeliverables = last.filter(l => l.endDate > compareTime);
-        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta))).groupBy('deliverable_id').map(v => v).value();
+        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
         tldr.push(GeneralHelpers.shortenText(`There are currently ${deliverableTimes.length} scheduled deliverables.  \n`));
         
         const deliverableRanks = [];
         deliverableTimes.forEach(dt => {
             let time = 0;
-            dt.forEach(t => {
-                time += t.endDate - t.startDate;
+            const members = [];
+            dt.forEach(ta => {
+                time += ta.endDate - ta.startDate;
+                members[ta.title] = ta.numberOfMembers;
             });
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time});
+            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a, 0);
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, members: totalMembers});
         });
-        const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,10);
-        tldr.push(GeneralHelpers.shortenText('The top ten highest currently scheduled tasks are (in man-days):  '));
+        const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
+        tldr.push(GeneralHelpers.shortenText('The top fifteen highest, currently scheduled tasks are (in man-days):  '));
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
             tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time)} - ${matchDeliverable.title}`));
+        });
+
+        tldr.push(GeneralHelpers.shortenText('  \nThe top fifteen highest, currently scheduled tasks are (in assigned devs):  '));
+        const topTenDevs = deliverableRanks.sort((a,b) => b.members - a.members).slice(0,15);
+        topTenDevs.forEach(ttd => {
+            const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
+            tldr.push(GeneralHelpers.shortenText(`* ${ttd.members} - ${matchDeliverable.title}`));
         });
 
         tldr.push('  \n---  \n\n');
