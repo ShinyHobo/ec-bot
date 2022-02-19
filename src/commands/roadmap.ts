@@ -746,7 +746,7 @@ export abstract class Roadmap {
         messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
         messages = messages.concat(updatedMessages);
         messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
-        messages = [...this.generateTldr(changes, last, start, end, args['publish']), ...messages];
+        messages = [...this.generateTldr(changes, first, last, start, end, args['publish']), ...messages];
 
         if(args['publish']) {
             messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
@@ -758,15 +758,16 @@ export abstract class Roadmap {
     /**
      * Generates a tldr collapsable block for displaying additional analysis
      * @param changes The list of changes that occurred between this update and the previous
-     * @param deliverables The list most current list of deliverables
+     * @param first The list of the original deliverables
+     * @param last The list of the most current deliverables
      * @param start The start date to compare
      * @param end The end date to compare
      * @param publish Whether to generate this section as publish ready markdown
      * @returns The tldr message array
      */
-    private static generateTldr(changes: any[number], deliverables: any[], start: number, end: number, publish: boolean = false): any[] {
+    private static generateTldr(changes: any[number], first: any[], last: any[], start: number, end: number, publish: boolean = false): any[] {
         const tldr = [];
-        tldr.push(`# Progress Tracker Delta #  \n### ${deliverables.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
         tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
@@ -776,7 +777,8 @@ export abstract class Roadmap {
             tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
         }
 
-        const scheduledDeliverables = deliverables.filter(l => l.endDate > end);
+        //#region Percents
+        const scheduledDeliverables = last.filter(l => l.endDate > end);
         const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
         const deliverableRanks = [];
         deliverableTimes.forEach(dt => {
@@ -801,9 +803,8 @@ export abstract class Roadmap {
         const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
         const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
         
-        const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
+        //const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
         const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
-        const projectTotal = squadronNum.length + puNum.length;
 
         let squadronDevs = 0;
         let squadronDays = 0;
@@ -825,8 +826,11 @@ export abstract class Roadmap {
         squadronDevs = Math.round(squadronDevs);
 
         tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}, or ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+
-            `Of those deliverables, ${Math.round(squadronNum.length/deliverables.length*100)}% are for SQ42 exclusively, with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/deliverables.length*100)}% of deliverables are shared between both projects. `+
+            `Of those deliverables, ${Math.round(squadronNum.length/last.length*100)}% are for SQ42 exclusively, with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% of deliverables are shared between both projects. `+
             `${publishBreak}${publishBreak}  \n`));
+        //#endregion
+
+        // TODO - average shift
 
         //#region top 15s
         const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
@@ -836,7 +840,7 @@ export abstract class Roadmap {
         }
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
+            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title} ${RSINetwork.generateProjectIcons(matchDeliverable)}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
         });
         if(publish) {
             tldr.push('</ul>');
@@ -849,7 +853,7 @@ export abstract class Roadmap {
         const topTenDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers).slice(0,15);
         topTenDevs.forEach(ttd => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title}${publish?'</li>':''}`));
+            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title} ${RSINetwork.generateProjectIcons(matchDeliverable)}${publish?'</li>':''}`));
         });
 
         if(publish) {
