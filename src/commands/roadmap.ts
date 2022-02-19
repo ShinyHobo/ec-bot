@@ -520,13 +520,20 @@ export abstract class Roadmap {
 
                 if(dMatch.teams) {
                     
-                    messages.push(GeneralHelpers.shortenText(`The following team(s) have been freed up:  \n`));
+                    messages.push(GeneralHelpers.shortenText(`The following team(s) have been freed up:`));
                     const freedTeams = dMatch.teams.filter(t => t.timeAllocations);
                     freedTeams.forEach(ft => {
                         GeneralHelpers.mergeDateRanges(ft.timeAllocations);
                         messages.push(GeneralHelpers.shortenText(`* ${ft.title}`));
+                        const disciplineSchedules = _._(ft.timeAllocations).groupBy('discipline_id').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            const load = this.generateLoad(ds, compareTime, d);
+                            if(load.tasks) {
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${load.devs} had ${load.tasks} tasks  \n`);
+                            }
+                        });
                     });
-                    // TODO - Add how many devs have been freed up for each discipline
+                    messages.push('  \n');
                 }
 
                 messages = [...messages, ...this.generateCardImage(d, dMatch, args['publish'])];
@@ -742,6 +749,10 @@ export abstract class Roadmap {
         
         const tldr = [];
 
+        if(args['publish']) {
+            tldr.push('<details><summary>tldr (click me)</summary><p>');
+        }
+
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
         tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
@@ -782,6 +793,10 @@ export abstract class Roadmap {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
             tldr.push(GeneralHelpers.shortenText(`* ${ttd.totalMembers} - ${matchDeliverable.title}`));
         });
+
+        if(args['publish']) {
+            tldr.push('</p></details>');
+        }
 
         tldr.push('  \n---  \n\n');
 
