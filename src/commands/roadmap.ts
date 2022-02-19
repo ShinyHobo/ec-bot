@@ -251,7 +251,7 @@ export abstract class Roadmap {
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
         const mostRecentDisciplineIds = dbTimeAllocations.filter(dd => dd.discipline_id).map((dd) => dd.discipline_id).toString();
-        let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate) FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid`).all();
+        let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate), uuid AS disciplineUuid FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid ORDER BY id`).all();
 
         // TODO - investigate cleaning up removed deliverables code below, check buildDeliverables()
         const dbRemovedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
@@ -290,18 +290,20 @@ export abstract class Roadmap {
                     if(dt.timeAllocations) {
                         dt.timeAllocations.forEach((ta) => {
                             let disciplineId = null;
-                            const taMatch = dbTimeAllocations.sort((a,b) => b.addedDate - a.addedDate).find(t => t.uuid === ta.uuid);
-                            const taDiff = diff.getDiff(taMatch, ta);
-                            const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
-
-                            const diMatch = dbDisciplines.find(di => di.disciplineUuid === ta.disciplineUuid);
-                            if(!diMatch || taChanges.some(tac => disciplineProperties.includes(tac.change && tac.change.toString()))) {
+                            const diMatch = dbDisciplines.sort((a,b) => b.addedDate - a.addedDate).find(di => di.disciplineUuid === ta.disciplineUuid);
+                            const diDiff = diff.getDiff(diMatch, ta);
+                            const diChanges = diDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
+                            if(!diMatch || diChanges.some(tac => disciplineProperties.includes(tac.change && tac.change.toString()))) {
                                 const disciplineRow = disciplinesInsert.run([ta.numberOfMembers, ta.title, ta.disciplineUuid, now]);
                                 disciplineId = disciplineRow.lastInsertRowid;
-                                dbDisciplines.push({id: disciplineId, ...ta}); // filter duplicates
+                                dbDisciplines.push({id: disciplineId, addedDate: now, ...ta}); // filter duplicates
                             } else {
                                 disciplineId = diMatch.id;
                             }
+
+                            const taMatch = dbTimeAllocations.sort((a,b) => b.addedDate - a.addedDate).find(t => t.uuid === ta.uuid);
+                            const taDiff = diff.getDiff(taMatch, ta);
+                            //const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
 
                             if(!taMatch || taDiff.length) {
                                 dbTimeAllocations.push({team_id: teamId, discipline_id: disciplineId, addedDate: now, ...ta});
@@ -512,13 +514,18 @@ export abstract class Roadmap {
             messages.push(`## [${removedDeliverables.length}] deliverable(s) *removed*: ##  \n`);
             removedDeliverables.forEach(d => {
                 const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
-                messages.push(he.unescape(`### **${d.title.trim()}** ${RSINetwork.generateProjectIcons(d)} ###  \n`.toString()));
+                messages.push(he.unescape(`### **${d.title.trim()}** ${args['publish']?RSINetwork.generateProjectIcons(d):''} ###  \n`.toString()));
                 messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
                 messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
 
                 if(dMatch.teams) {
-                    const freedTeams = dMatch.teams.map(t => t.title);
-                    messages.push(GeneralHelpers.shortenText(`* The following team(s) have been freed up: ${_.uniq(freedTeams).join(', ')}  \n`));
+                    
+                    messages.push(GeneralHelpers.shortenText(`The following team(s) have been freed up:  \n`));
+                    const freedTeams = dMatch.teams.filter(t => t.timeAllocations);
+                    freedTeams.forEach(ft => {
+                        GeneralHelpers.mergeDateRanges(ft.timeAllocations);
+                        messages.push(GeneralHelpers.shortenText(`* ${ft.title}`));
+                    });
                     // TODO - Add how many devs have been freed up for each discipline
                 }
 
@@ -675,8 +682,8 @@ export abstract class Roadmap {
                                 }
 
                                 if(showDisciplines) {
-                                    const lDisciplineSchedules = _._(lt.timeAllocations).groupBy('title').map(v=>v).value();
-                                    const fDisciplineSchedules = teamMatch ? _._(teamMatch.timeAllocations).groupBy('title').map(v=>v).value() : [];
+                                    const lDisciplineSchedules = _._(lt.timeAllocations).groupBy('discipline_id').map(v=>v).value();
+                                    const fDisciplineSchedules = teamMatch ? _._(teamMatch.timeAllocations).groupBy('discipline_id').map(v=>v).value() : [];
                                     lDisciplineSchedules.forEach(ds => {
                                         const matchDisciplineSchedule = fDisciplineSchedules.find(fds => fds[0].title === ds[0].title);
                                         const fLoad = matchDisciplineSchedule ? this.generateLoad(matchDisciplineSchedule, compareTime, f) : false;
@@ -743,31 +750,37 @@ export abstract class Roadmap {
 
         const scheduledDeliverables = last.filter(l => l.endDate > compareTime);
         const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
-        tldr.push(GeneralHelpers.shortenText(`There are currently ${deliverableTimes.length} scheduled deliverables.  \n`));
-        
         const deliverableRanks = [];
         deliverableTimes.forEach(dt => {
             let time = 0;
             const members = [];
             dt.forEach(ta => {
                 time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.title] = ta.numberOfMembers;
+                members[ta.title] = {members: ta.numberOfMembers};
+                if(!ta.partialTime) {
+                    members[ta.title].partialTime = true;
+                }
             });
-            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a, 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, members: totalMembers});
+            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
+            const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers});
         });
+        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0));
+        const hiredDevs = 512; // reported as of 2020
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}; ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) currently working on ${deliverableTimes.length} scheduled, observable deliverables.  \n`));
+        // const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
         const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
-        tldr.push(GeneralHelpers.shortenText('The top fifteen highest, currently scheduled tasks are (in estimated man-days):  '));
+        tldr.push(GeneralHelpers.shortenText('The top fifteen currently scheduled tasks (in estimated man-days) are:  '));
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
             tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title}`)); // Divide by three to break into 8 hour segments
         });
 
-        tldr.push(GeneralHelpers.shortenText('  \nThe top fifteen highest, currently scheduled tasks are (in assigned devs):  '));
-        const topTenDevs = deliverableRanks.sort((a,b) => b.members - a.members).slice(0,15);
+        tldr.push(GeneralHelpers.shortenText('  \nThe top fifteen currently scheduled tasks (in assigned devs) are :  '));
+        const topTenDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers).slice(0,15);
         topTenDevs.forEach(ttd => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`* ${ttd.members} - ${matchDeliverable.title}`));
+            tldr.push(GeneralHelpers.shortenText(`* ${ttd.totalMembers} - ${matchDeliverable.title}`));
         });
 
         tldr.push('  \n---  \n\n');
