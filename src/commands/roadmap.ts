@@ -784,19 +784,22 @@ export abstract class Roadmap {
         deliverableTimes.forEach(dt => {
             let time = 0;
             const members = [];
+            let partTime = 0;
             dt.forEach(ta => {
                 time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
                 members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(!ta.partialTime) {
+                if(ta.partialTime) {
                     members[ta.disciplineUuid].partialTime = true;
+                    partTime++;
                 }
             });
             const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
             const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers});
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime});
         });
         const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
-        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0));
+        // TODO - user parttime percentage to help adjust dev numbers
+        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
         const publishBreak = publish?'<br/>':'';
         const hiredDevs = 512; // reported as of 2020
 
@@ -814,7 +817,7 @@ export abstract class Roadmap {
             dt.forEach(ta => {
                 time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
                 members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(!ta.partialTime) {
+                if(ta.partialTime) {
                     members[ta.disciplineUuid].partialTime = true;
                 }
             });
@@ -825,35 +828,44 @@ export abstract class Roadmap {
         squadronDays = Math.round(squadronDays);
         squadronDevs = Math.round(squadronDevs);
 
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}, or ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+
-            `Of those deliverables, ${Math.round(squadronNum.length/last.length*100)}% are for SQ42 exclusively, with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% of deliverables are shared between both projects. `+
-            `${publishBreak}${publishBreak}  \n`));
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}, or ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
+            `Of those deliverables, ${Math.round(squadronNum.length/last.length*100)}% are for SQ42 exclusively, `+
+            `with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% `+
+            `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
         //#endregion
 
         // TODO - average shift
 
         //#region top 15s
-        const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
-        tldr.push(GeneralHelpers.shortenText(`${publish?'<h3>':''}The top fifteen currently scheduled tasks (in estimated man-days) are:${publish?'</h3>':''}  `));
+        let rankedTimes = deliverableRanks.sort((a,b) => b.time - a.time);
+        rankedTimes = publish ? rankedTimes : rankedTimes.slice(0,15);
+        tldr.push(GeneralHelpers.shortenText(`${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in estimated man-days) are:${publish?'</h3>':''}  `));
         if(publish) {
-            tldr.push('<ul>');
+            tldr.push('<ul class="ranked-deliverables">');
         }
-        topTenTimes.forEach(ttt => {
+
+        // TODO - consolidate code
+        rankedTimes.forEach(ttt => {
+            const partTimePercent = Math.round(ttt.partTime/ttt.tasks*100);
+            const partTimeText = partTimePercent ? `${partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title} ${RSINetwork.generateProjectIcons(matchDeliverable)}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
+            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
         });
         if(publish) {
             tldr.push('</ul>');
         }
-        tldr.push(GeneralHelpers.shortenText(`\n${publishBreak}${publish?'<h3>':''}The top fifteen currently scheduled tasks (in assigned devs) are:${publish?'</h3>':''}  `));
+        tldr.push(GeneralHelpers.shortenText(`\n${publishBreak}${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in assigned devs) are:${publish?'</h3>':''}  `));
         if(publish) {
-            tldr.push('<ul>');
+            tldr.push('<ul class="ranked-deliverables">');
         }
         
-        const topTenDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers).slice(0,15);
-        topTenDevs.forEach(ttd => {
+        let rankedDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers);
+        rankedDevs = publish ? rankedDevs : rankedDevs.slice(0,15);
+        rankedDevs.forEach(ttd => {
+            const partTimePercent = Math.round(ttd.partTime/ttd.tasks*100);
+            const partTimeText = partTimePercent ? `${partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title} ${RSINetwork.generateProjectIcons(matchDeliverable)}${publish?'</li>':''}`));
+            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`));
         });
 
         if(publish) {
