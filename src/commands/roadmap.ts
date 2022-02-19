@@ -786,9 +786,9 @@ export abstract class Roadmap {
             const members = [];
             dt.forEach(ta => {
                 time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.title] = {members: ta.numberOfMembers};
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
                 if(!ta.partialTime) {
-                    members[ta.title].partialTime = true;
+                    members[ta.disciplineUuid].partialTime = true;
                 }
             });
             const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
@@ -813,9 +813,9 @@ export abstract class Roadmap {
             const members = [];
             dt.forEach(ta => {
                 time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.title] = {members: ta.numberOfMembers};
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
                 if(!ta.partialTime) {
-                    members[ta.title].partialTime = true;
+                    members[ta.disciplineUuid].partialTime = true;
                 }
             });
             squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
