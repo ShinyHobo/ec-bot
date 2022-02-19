@@ -749,15 +749,15 @@ export abstract class Roadmap {
         
         const tldr = [];
 
-        if(args['publish']) {
-            tldr.push('<details><summary>tldr (click me)</summary><p>');
-        }
-
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
         tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
         tldr.push('---  \n\n');
+
+        if(args['publish']) {
+            tldr.push('<details><summary><h3>tldr; click me</h3></summary><br/>  \n');
+        }
 
         const scheduledDeliverables = last.filter(l => l.endDate > compareTime);
         const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
@@ -777,25 +777,35 @@ export abstract class Roadmap {
             deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers});
         });
         const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0));
+        const publishBreak = args['publish']?'<br/>':'';
         const hiredDevs = 512; // reported as of 2020
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}; ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) currently working on ${deliverableTimes.length} scheduled, observable deliverables.  \n`));
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}; ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) currently working on ${deliverableTimes.length} scheduled, observable deliverables.${publishBreak}${publishBreak}  \n`));
         // const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
         const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
-        tldr.push(GeneralHelpers.shortenText('The top fifteen currently scheduled tasks (in estimated man-days) are:  '));
+        tldr.push(GeneralHelpers.shortenText(`${args['publish']?'<h3>':''}The top fifteen currently scheduled tasks (in estimated man-days) are:${args['publish']?'</h3>':''}  `));
+        if(args['publish']) {
+            tldr.push('<ul>');
+        }
         topTenTimes.forEach(ttt => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`* ${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title}`)); // Divide by three to break into 8 hour segments
+            tldr.push(GeneralHelpers.shortenText(`${args['publish']?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title}${args['publish']?'</li>':''}`)); // Divide by three to break into 8 hour segments
         });
-
-        tldr.push(GeneralHelpers.shortenText('  \nThe top fifteen currently scheduled tasks (in assigned devs) are :  '));
+        if(args['publish']) {
+            tldr.push('</ul>');
+        }
+        tldr.push(GeneralHelpers.shortenText(`\n${publishBreak}${args['publish']?'<h3>':''}The top fifteen currently scheduled tasks (in assigned devs) are:${args['publish']?'</h3>':''}  `));
+        if(args['publish']) {
+            tldr.push('<ul>');
+        }
+        
         const topTenDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers).slice(0,15);
         topTenDevs.forEach(ttd => {
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`* ${ttd.totalMembers} - ${matchDeliverable.title}`));
+            tldr.push(GeneralHelpers.shortenText(`${args['publish']?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title}${args['publish']?'</li>':''}`));
         });
 
         if(args['publish']) {
-            tldr.push('</p></details>');
+            tldr.push('</ul></details>');
         }
 
         tldr.push('  \n---  \n\n');
