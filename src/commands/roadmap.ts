@@ -793,11 +793,42 @@ export abstract class Roadmap {
             const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
             deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers});
         });
+        const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
         const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0));
         const publishBreak = publish?'<br/>':'';
         const hiredDevs = 512; // reported as of 2020
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}; ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) currently working on ${deliverableTimes.length} scheduled, observable deliverables.${publishBreak}${publishBreak}  \n`));
-        // const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
+
+        const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
+        const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
+        
+        const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
+        const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
+        const projectTotal = squadronNum.length + puNum.length;
+
+        let squadronDevs = 0;
+        let squadronDays = 0;
+        squadronTimes.forEach(dt => {
+            let time = 0;
+            const members = [];
+            dt.forEach(ta => {
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
+                members[ta.title] = {members: ta.numberOfMembers};
+                if(!ta.partialTime) {
+                    members[ta.title].partialTime = true;
+                }
+            });
+            squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            squadronDays += GeneralHelpers.convertMillisecondsToDays(time)/3;// split days down to 8 hours rather than 24
+        });
+
+        squadronDays = Math.round(squadronDays);
+        squadronDevs = Math.round(squadronDevs);
+
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}, or ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+
+            `Of those deliverables, ${Math.round(squadronNum.length/deliverables.length*100)}% are for SQ42 exclusively, with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/deliverables.length*100)}% of deliverables are shared between both projects. `+
+            `${publishBreak}${publishBreak}  \n`));
+
+        //#region top 15s
         const topTenTimes = deliverableRanks.sort((a,b) => b.time - a.time).slice(0,15);
         tldr.push(GeneralHelpers.shortenText(`${publish?'<h3>':''}The top fifteen currently scheduled tasks (in estimated man-days) are:${publish?'</h3>':''}  `));
         if(publish) {
@@ -822,7 +853,12 @@ export abstract class Roadmap {
         });
 
         if(publish) {
-            tldr.push('</ul></details>');
+            tldr.push('</ul>');
+        }
+        //#endregion
+
+        if(publish) {
+            tldr.push('</details>');
         }
 
         tldr.push('  \n---  \n\n');
