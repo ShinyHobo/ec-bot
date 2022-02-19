@@ -795,7 +795,8 @@ export abstract class Roadmap {
             });
             const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
             const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: time, totalMembers: totalMembers, adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime});
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
+                adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
         });
         const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
         // TODO - user parttime percentage to help adjust dev numbers
@@ -837,39 +838,37 @@ export abstract class Roadmap {
         // TODO - average shift
 
         //#region top 15s
-        let rankedTimes = deliverableRanks.sort((a,b) => b.time - a.time);
+        let rankedTimes = _.orderBy(deliverableRanks, ["time","partTimePercent"], ['desc','asc']);
         rankedTimes = publish ? rankedTimes : rankedTimes.slice(0,15);
         tldr.push(GeneralHelpers.shortenText(`${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in estimated man-days) are:${publish?'</h3>':''}  `));
         if(publish) {
-            tldr.push('<ul class="ranked-deliverables">');
+            tldr.push('<ol class="ranked-deliverables">');
         }
 
         // TODO - consolidate code
         rankedTimes.forEach(ttt => {
-            const partTimePercent = Math.round(ttt.partTime/ttt.tasks*100);
-            const partTimeText = partTimePercent ? `${partTimePercent}% part-time` : 'full-time';
+            const partTimeText = ttt.partTimePercent ? `${ttt.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${GeneralHelpers.convertMillisecondsToDays(ttt.time/3)} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
+            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${Math.round(ttt.time)} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
         });
         if(publish) {
-            tldr.push('</ul>');
+            tldr.push('</ol>');
         }
         tldr.push(GeneralHelpers.shortenText(`\n${publishBreak}${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in assigned devs) are:${publish?'</h3>':''}  `));
         if(publish) {
-            tldr.push('<ul class="ranked-deliverables">');
+            tldr.push('<ol class="ranked-deliverables">');
         }
         
-        let rankedDevs = deliverableRanks.sort((a,b) => b.totalMembers - a.totalMembers);
+        let rankedDevs = _.orderBy(deliverableRanks, ["totalMembers","partTimePercent"], ['desc','asc']);
         rankedDevs = publish ? rankedDevs : rankedDevs.slice(0,15);
         rankedDevs.forEach(ttd => {
-            const partTimePercent = Math.round(ttd.partTime/ttd.tasks*100);
-            const partTimeText = partTimePercent ? `${partTimePercent}% part-time` : 'full-time';
+            const partTimeText = ttd.partTimePercent ? `${ttd.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
             tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`));
         });
 
         if(publish) {
-            tldr.push('</ul>');
+            tldr.push('</ol>');
         }
         //#endregion
 
