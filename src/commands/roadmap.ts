@@ -746,7 +746,7 @@ export abstract class Roadmap {
         messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
         messages = messages.concat(updatedMessages);
         messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
-        messages = [...this.generateTldr(changes, first, last, start, end, args['publish']), ...messages];
+        messages = [...this.generateTldr(changes, first, last, start, end, compareTime, args['publish']), ...messages];
 
         if(args['publish']) {
             messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
@@ -762,10 +762,11 @@ export abstract class Roadmap {
      * @param last The list of the most current deliverables
      * @param start The start date to compare
      * @param end The end date to compare
+     * @param compareTime The time to compare to, usually when the end deliverables were obtained
      * @param publish Whether to generate this section as publish ready markdown
      * @returns The tldr message array
      */
-    private static generateTldr(changes: any[number], first: any[], last: any[], start: number, end: number, publish: boolean = false): any[] {
+    private static generateTldr(changes: any[number], first: any[], last: any[], start: number, end: number, compareTime: number, publish: boolean = false): any[] {
         const tldr = [];
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
@@ -835,7 +836,32 @@ export abstract class Roadmap {
             `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
         //#endregion
 
-        // TODO - average shift
+        //#region average shift
+        let shift = 0; // time shift forwards/backwards
+        let shifts = 0;
+        let completed = 0;
+        first.forEach(f => {
+            const matchDeliverable = last.find(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")));
+            if(matchDeliverable) {
+                if(matchDeliverable.endDate > compareTime) {
+                    shift += matchDeliverable.endDate - f.endDate;
+                    shifts++;
+                } else if(matchDeliverable.endDate > compareTime - (86400000 * 4)){
+                    completed++;
+                }
+            } // else deliverable was removed
+        });
+        shift = GeneralHelpers.convertMillisecondsToDays(Math.round(shift/shifts));
+        let shiftText = '';
+        if(Math.sign(shift) > 0) {
+            shiftText = `expanded ${shift} days`;
+        } else if(Math.sign(shift) < 0) {
+            shiftText = `shrunk ${shift} days`;
+        } else {
+            shiftText = 'not moved';
+        }
+        tldr.push(`  \nOn average, the schedule has ${shiftText}. ${completed} deliverables were not extended.  \n`);
+        //#endregion
 
         if(publish) {
             tldr.push('<input type="text" id="top-deliverables-filter" placeholder="Filter deliverables"/>');
