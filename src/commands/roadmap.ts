@@ -853,8 +853,9 @@ export abstract class Roadmap {
         rankedTimes.forEach(ttt => {
             const partTimeText = ttt.partTimePercent ? `${ttt.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            const title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${matchDeliverable.title}</a>` : matchDeliverable.title;
-            tldr.push(`${publish?'<li>':'* '}${Math.round(ttt.time)} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`); // Divide by three to break into 8 hour segments
+            let title = matchDeliverable.title.includes("Unannounced") ? matchDeliverable.description : matchDeliverable.title;
+            title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${title}</a>` : title;
+            tldr.push(`${publish?'<li>':'* '}${Math.round(ttt.time)} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>\n':'  \n'}`); // Divide by three to break into 8 hour segments
         });
         if(publish) {
             tldr.push('</ol>');
@@ -869,8 +870,9 @@ export abstract class Roadmap {
         rankedDevs.forEach(ttd => {
             const partTimeText = ttd.partTimePercent ? `${ttd.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            const title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${matchDeliverable.title}</a>` : matchDeliverable.title;
-            tldr.push(`${publish?'<li>':'* '}${ttd.totalMembers} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`);
+            let title = matchDeliverable.title.includes("Unannounced") ? matchDeliverable.description : matchDeliverable.title;
+            title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${title}</a>` : title;
+            tldr.push(`${publish?'<li>':'* '}${ttd.totalMembers} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>\n':'  \n'}`);
         });
 
         if(publish) {
