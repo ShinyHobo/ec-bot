@@ -839,15 +839,15 @@ export abstract class Roadmap {
         //#region average shift
         let shift = 0; // time shift forwards/backwards
         let shifts = 0;
-        let completed = 0;
+        let completed = [];
         first.forEach(f => {
             const matchDeliverable = last.find(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")));
             if(matchDeliverable) {
                 if(matchDeliverable.endDate > compareTime) {
                     shift += matchDeliverable.endDate - f.endDate;
                     shifts++;
-                } else if(matchDeliverable.endDate > compareTime - (86400000 * 4)){
-                    completed++;
+                } else if(matchDeliverable.endDate > compareTime - (86400000 * 14)){
+                    completed.push(matchDeliverable);
                 }
             } // else deliverable was removed
         });
@@ -860,7 +860,18 @@ export abstract class Roadmap {
         } else {
             shiftText = 'not moved';
         }
-        tldr.push(`  \nOn average, the schedule has ${shiftText}. ${completed} deliverables were not extended.  \n`);
+        tldr.push(`  \nOn average, the schedule has ${shiftText}. ${completed.length} deliverables were not extended:  \n`);
+        if(publish) {
+            tldr.push('<ul>');
+        }
+        completed.forEach(c => {
+            let title = c.title.includes("Unannounced") ? c.description : c.title;
+            title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${c.slug}' target="_blank">${title}</a>` : title;
+            tldr.push(`${publish?'<li>':'* '}${title}${publish?'</li>\n':'  \n'}`);
+        });
+        if(publish) {
+            tldr.push('</ul>');
+        }
         //#endregion
 
         if(publish) {
