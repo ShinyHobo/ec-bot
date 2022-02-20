@@ -860,7 +860,7 @@ export abstract class Roadmap {
         } else {
             shiftText = 'not moved';
         }
-        tldr.push(`  \nOn average, the schedule has ${shiftText}. ${completed.length} deliverables were not extended:  \n`);
+        tldr.push(`  \nOn average, the schedule has ${shiftText}.${completed.length ? ` ${completed.length} deliverables were not extended:` : ''}  \n`);
         if(publish) {
             tldr.push('<ul>');
         }
