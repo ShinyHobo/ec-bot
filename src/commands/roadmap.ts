@@ -854,9 +854,9 @@ export abstract class Roadmap {
         shift = GeneralHelpers.convertMillisecondsToDays(Math.round(shift/shifts));
         let shiftText = '';
         if(Math.sign(shift) > 0) {
-            shiftText = `expanded ${shift} days`;
+            shiftText = `expanded by ${shift} days`;
         } else if(Math.sign(shift) < 0) {
-            shiftText = `shrunk ${shift} days`;
+            shiftText = `shrunk by ${shift} days`;
         } else {
             shiftText = 'not moved';
         }
