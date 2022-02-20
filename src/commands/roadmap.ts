@@ -837,6 +837,10 @@ export abstract class Roadmap {
 
         // TODO - average shift
 
+        if(publish) {
+            tldr.push('<input type="text" id="top-deliverables-filter" placeholder="Filter deliverables"/>');
+        }
+
         //#region top 15s
         let rankedTimes = _.orderBy(deliverableRanks, ["time","partTimePercent"], ['desc','asc']);
         rankedTimes = publish ? rankedTimes : rankedTimes.slice(0,15);
@@ -849,7 +853,8 @@ export abstract class Roadmap {
         rankedTimes.forEach(ttt => {
             const partTimeText = ttt.partTimePercent ? `${ttt.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${Math.round(ttt.time)} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`)); // Divide by three to break into 8 hour segments
+            const title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${matchDeliverable.title}</a>` : matchDeliverable.title;
+            tldr.push(`${publish?'<li>':'* '}${Math.round(ttt.time)} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`); // Divide by three to break into 8 hour segments
         });
         if(publish) {
             tldr.push('</ol>');
@@ -864,7 +869,8 @@ export abstract class Roadmap {
         rankedDevs.forEach(ttd => {
             const partTimeText = ttd.partTimePercent ? `${ttd.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttd.deliverable_id);
-            tldr.push(GeneralHelpers.shortenText(`${publish?'<li>':'* '}${ttd.totalMembers} - ${matchDeliverable.title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`));
+            const title = publish ? `<a href='https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${matchDeliverable.slug}' target="_blank">${matchDeliverable.title}</a>` : matchDeliverable.title;
+            tldr.push(`${publish?'<li>':'* '}${ttd.totalMembers} - ${title} (${partTimeText}) ${publish?RSINetwork.generateProjectIcons(matchDeliverable):''}${publish?'</li>':''}`);
         });
 
         if(publish) {
