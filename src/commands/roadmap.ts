@@ -1108,10 +1108,10 @@ export abstract class Roadmap {
                     if(!newWaterfall.length) {
                         newWaterfall = new Array(52).fill('..');
                     }
-                    const weightedTimePercent = this.calculateTaskLoad(sprint);
+                    const weightedTimePercent = (sprint.fullTime + sprint.partTime * .5) / (sprint.fullTime + sprint.partTime);
                     const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
                     const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                    const fill = weightedTimePercent > 1 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
+                    const fill = weightedTimePercent > .8 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
                     const period = new Array(endWeek + 1 - startWeek).fill(fill);
                     newWaterfall.splice(startWeek - 1, period.length, ...period);
                 });
