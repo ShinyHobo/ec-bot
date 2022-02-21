@@ -1088,7 +1088,7 @@ export abstract class Roadmap {
             // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
             // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
             let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
-            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, ...sprint[0]}));
+            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
             const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints);
             const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
             
