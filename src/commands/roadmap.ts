@@ -33,6 +33,9 @@ export abstract class Roadmap {
         Teams: "Teams"
     });
 
+    /** The number of developers employed at CIG as of the 2020 financial report */
+    private static readonly HiredDevs = 512;
+
     /** Set to true to allow the command to export to discord */
     private static readonly AllowExportSnapshotsToDiscord = false;
     //#endregion
@@ -803,7 +806,6 @@ export abstract class Roadmap {
         // TODO - user parttime percentage to help adjust dev numbers
         const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
         const publishBreak = publish?'<br/>':'';
-        const hiredDevs = 512; // reported as of 2020
 
         const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
         const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
@@ -830,9 +832,9 @@ export abstract class Roadmap {
         squadronDays = Math.round(squadronDays);
         squadronDevs = Math.round(squadronDevs);
 
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${hiredDevs}, or ${Math.round(adjustedTotalDevs/hiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${this.HiredDevs}, or ${Math.round(adjustedTotalDevs/this.HiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
             `Of those deliverables, ${Math.round(squadronNum.length/last.length*100)}% are for SQ42 exclusively, `+
-            `with ~${squadronDevs} devs (${Math.round(squadronDevs/hiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% `+
+            `with ~${squadronDevs} devs (${Math.round(squadronDevs/this.HiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% `+
             `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
         //#endregion
 
@@ -1026,6 +1028,7 @@ export abstract class Roadmap {
             return messages;
         }
 
+        const scheduledDeliverables = deliverables.filter(l => currentTasks.some(ct => ct.did === l.id));
         const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
         const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
 
@@ -1052,7 +1055,9 @@ export abstract class Roadmap {
 
         messages.push("---  \n");
 
-        deliverables.filter(l => currentTasks.some(ct => ct.did === l.id)).forEach((d) => {
+        messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
+
+        scheduledDeliverables.forEach((d) => {
             const schedules = groupedTasks[d.id];
             const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
             const title = d.title.includes("Unannounced") ? d.description : d.title;
@@ -1068,6 +1073,82 @@ export abstract class Roadmap {
         });
 
         return messages;
+    }
+
+    /**
+     * Generates extra analysis for the Scheduled Deliverables Report
+     * @param scheduledDeliverables The deliverables that are currently being worked on
+     * @param compareTime The time the report was run
+     * @param publish Whether or not to add additional markdown for website publishing
+     * @returns The tldr lines
+     */
+    private static generateScheduledTldr(scheduledDeliverables: any[any], compareTime: number, publish: boolean = false): any[string] {
+        const tldr = [];
+        if(publish) {
+            tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
+        }
+        
+        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
+        const deliverableRanks = [];
+        deliverableTimes.forEach(dt => {
+            let time = 0;
+            const members = [];
+            let partTime = 0;
+            dt.forEach(ta => {
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
+                if(ta.partialTime) {
+                    members[ta.disciplineUuid].partialTime = true;
+                    partTime++;
+                }
+            });
+            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
+            const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
+                adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
+        });
+        const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
+        // TODO - user parttime percentage to help adjust dev numbers
+        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
+        const publishBreak = publish?'<br/>':'';
+
+        const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
+        const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
+        
+        const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
+        const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
+
+        let squadronDevs = 0;
+        let squadronDays = 0;
+        squadronTimes.forEach(dt => {
+            let time = 0;
+            const members = [];
+            dt.forEach(ta => {
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
+                if(ta.partialTime) {
+                    members[ta.disciplineUuid].partialTime = true;
+                }
+            });
+            squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            squadronDays += GeneralHelpers.convertMillisecondsToDays(time)/3;// split days down to 8 hours rather than 24
+        });
+
+        squadronDays = Math.round(squadronDays);
+        squadronDevs = Math.round(squadronDevs);
+
+        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${this.HiredDevs}, or ${Math.round(adjustedTotalDevs/this.HiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
+            `Of those deliverables, ${Math.round(squadronNum.length/scheduledDeliverables.length*100)}% are for SQ42 exclusively, `+
+            `with ~${squadronDevs} devs (${Math.round(squadronDevs/this.HiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/scheduledDeliverables.length*100)}% `+
+            `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
+
+        if(publish) {
+            tldr.push('</details>');
+        }
+
+        tldr.push("---  \n");
+
+        return tldr;
     }
 
     /**
