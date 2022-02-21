@@ -840,13 +840,15 @@ export abstract class Roadmap {
         let shift = 0; // time shift forwards/backwards
         let shifts = 0;
         let completed = [];
+        let lookBack = 86400000 * 14; // 14 days, bi-weekly updates, usually
+        lookBack = lookBack > end - start ? lookBack : end - start;
         first.forEach(f => {
             const matchDeliverable = last.find(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")));
             if(matchDeliverable) {
                 if(matchDeliverable.endDate > compareTime) {
                     shift += matchDeliverable.endDate - f.endDate;
                     shifts++;
-                } else if(matchDeliverable.endDate > compareTime - (86400000 * 14)){
+                } else if(matchDeliverable.endDate > compareTime - lookBack){
                     completed.push(matchDeliverable);
                 }
             } // else deliverable was removed
