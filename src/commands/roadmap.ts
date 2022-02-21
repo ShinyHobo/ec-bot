@@ -563,7 +563,7 @@ export abstract class Roadmap {
 
                 if(d.teams) {
                     messages.push(`The following team(s) were assigned:  \n`);
-                    d.teams.forEach(t => {
+                    _.orderBy(d.teams, [t => t.title.toLowerCase()], ['asc']).forEach(t => {
                         const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
                         const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
                         messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
@@ -644,7 +644,7 @@ export abstract class Roadmap {
 
                         if(dChanges.some(p => p.change === 'teams')) {
                             const teamChangesToDetect = ['startDate', 'endDate', 'timeAllocations']; // possible for start and end to remain the same while having shifting time allocations
-                            l.teams.forEach(lt => { // added/modified
+                            _.orderBy(l.teams, [t => t.title.toLowerCase()], ['asc']).forEach(lt => { // added/modified
                                 //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelevant for deliverable based deltas
                                 const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
                                 const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
@@ -1080,7 +1080,7 @@ export abstract class Roadmap {
         const timelines = [];
         let waterfalls = [];
 
-        timelines.push(publish ? `<details><summary>${team.title.trim()} ${timelines}  \n` : `* ${team.title.trim()}  \n`);
+        timelines.push(publish ? `<details><summary>${publish?'<ul><li>':''}${team.title.trim()} ${timelines}<br/>\n` : `* ${team.title.trim()}  \n`);
 
         const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
         disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
@@ -1130,14 +1130,12 @@ export abstract class Roadmap {
                 }
                 
                 // descriptions for the current weeks in descending order of display
-                timelines.push(`<ul>`);
                 matchMergedSchedules.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
-                    timelines.push(`<li>${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
-                        ` thru ${new Date(ms.endDate).toDateString()}</li>`);
+                    timelines.push(`${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
+                        ` thru ${new Date(ms.endDate).toDateString()}<br/>\n`);
                 });
-                timelines.push(`</ul>`);
             } else {
                 matchMergedSchedules.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
@@ -1147,7 +1145,7 @@ export abstract class Roadmap {
                 });
             }
         });
-
+        timelines.push(`${publish?'</li></ul>':''}\n`);
         return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
