@@ -746,7 +746,7 @@ export abstract class Roadmap {
         messages.push(`## [${updatedDeliverables.length}] deliverable(s) *updated*: ##  \n`);
         messages = messages.concat(updatedMessages);
         messages.push(`## [${remainingDeliverables.length - updatedDeliverables.length}] deliverable(s) *unchanged* ##  \n\n`);
-        messages = [...this.generateTldr(changes, first, last, start, end, compareTime, args['publish']), ...messages];
+        messages = [...this.generateDeltaTldr(changes, first, last, start, end, compareTime, args['publish']), ...messages];
 
         if(args['publish']) {
             messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
@@ -766,7 +766,7 @@ export abstract class Roadmap {
      * @param publish Whether to generate this section as publish ready markdown
      * @returns The tldr message array
      */
-    private static generateTldr(changes: any[number], first: any[], last: any[], start: number, end: number, compareTime: number, publish: boolean = false): any[] {
+    private static generateDeltaTldr(changes: any[number], first: any[], last: any[], start: number, end: number, compareTime: number, publish: boolean = false): any[] {
         const tldr = [];
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
@@ -1018,7 +1018,8 @@ export abstract class Roadmap {
      */
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
-        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').map(t => t.id).toString();
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
         const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
 
         if(!currentTasks.length) {
@@ -1330,12 +1331,13 @@ export abstract class Roadmap {
 
         const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
         
-        const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) ORDER BY addedDate DESC`).all();
-        const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
+        const dbDeliverableTeams = db.prepare(`SELECT *, MAX(addedDate) FROM team_diff WHERE addedDate <= ${date} AND id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) GROUP BY slug ORDER BY addedDate DESC`).all();
+        const deliverableTeamIds = dbDeliverableTeams.map(dt => dt.id).toString()
+        const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE team_id IN (${deliverableTeamIds}) AND deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
         
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid, ta.addedDate AS time_added FROM timeAllocation_diff AS ta JOIN discipline_diff AS di ON di.id = ta.discipline_id`+
         ` WHERE deliverable_id IN (${deliverableIds}) AND team_id IN (${dbDeliverableTeams.map(z => z.id).join(',')}) AND partialTime IS NOT NULL GROUP BY ta.uuid`).all();
-        let teamIds = dbTimeAllocations.map(z => z.team_id).filter((value, index, self) => self.indexOf(value) === index);
+        //let teamIds = dbTimeAllocations.map(z => z.team_id).filter((value, index, self) => self.indexOf(value) === index);
         dbTimeAllocations.forEach(ta => {
             ta.disciplineUuid = ta.uuid;
             ta.id = ta.time_id;
