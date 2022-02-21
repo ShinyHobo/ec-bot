@@ -1055,10 +1055,11 @@ export abstract class Roadmap {
         deliverables.filter(l => currentTasks.some(ct => ct.did === l.id)).forEach((d) => {
             const schedules = groupedTasks[d.id];
             const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
+            const title = d.title.includes("Unannounced") ? d.description : d.title;
             if(publish) {
-                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
+                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
             } else {
-                messages.push(`  \n### **${d.title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
+                messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
             }
             
             teams.forEach((mt, i) => {
