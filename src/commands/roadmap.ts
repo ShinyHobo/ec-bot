@@ -783,59 +783,9 @@ export abstract class Roadmap {
 
         //#region Percents
         const scheduledDeliverables = last.filter(l => l.endDate > end);
-        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
-        const deliverableRanks = [];
-        deliverableTimes.forEach(dt => {
-            let time = 0;
-            const members = [];
-            let partTime = 0;
-            dt.forEach(ta => {
-                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(ta.partialTime) {
-                    members[ta.disciplineUuid].partialTime = true;
-                    partTime++;
-                }
-            });
-            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
-            const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
-                adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
-        });
-        const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
-        // TODO - user parttime percentage to help adjust dev numbers
-        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
-        const publishBreak = publish?'<br/>':'';
-
-        const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
-        const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > end))).groupBy('deliverable_id').map(v => v).value();
-        
-        //const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
-        const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
-
-        let squadronDevs = 0;
-        let squadronDays = 0;
-        squadronTimes.forEach(dt => {
-            let time = 0;
-            const members = [];
-            dt.forEach(ta => {
-                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(ta.partialTime) {
-                    members[ta.disciplineUuid].partialTime = true;
-                }
-            });
-            squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            squadronDays += GeneralHelpers.convertMillisecondsToDays(time)/3;// split days down to 8 hours rather than 24
-        });
-
-        squadronDays = Math.round(squadronDays);
-        squadronDevs = Math.round(squadronDevs);
-
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${this.HiredDevs}, or ${Math.round(adjustedTotalDevs/this.HiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
-            `Of those deliverables, ${Math.round(squadronNum.length/last.length*100)}% are for SQ42 exclusively, `+
-            `with ~${squadronDevs} devs (${Math.round(squadronDevs/this.HiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/last.length*100)}% `+
-            `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
+        const devBreakdown = this.generateDevBreakdown(last, end, scheduledDeliverables, publish);
+        const deliverableRanks = devBreakdown.deliverableRanks;
+        tldr.push(devBreakdown.breakdown);
         //#endregion
 
         //#region average shift
@@ -901,7 +851,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('</ol>');
         }
-        tldr.push(GeneralHelpers.shortenText(`\n${publishBreak}${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in assigned devs) are:${publish?'</h3>':''}  `));
+        tldr.push(GeneralHelpers.shortenText(`\n${publish?'<br/>':''}${publish?'<h3>':''}The top${publish?'':' fifteen'} currently scheduled tasks (in assigned devs) are:${publish?'</h3>':''}  `));
         if(publish) {
             tldr.push('<ol class="ranked-deliverables">');
         }
@@ -930,13 +880,77 @@ export abstract class Roadmap {
     }
 
     /**
+     * 
+     * @param deliverables The deliverables for the given time 
+     * @param compareTime The time to compare to
+     * @param scheduledDeliverables The deliverables currently being worked on
+     * @param publish Whether or not to generate the breakdown for publishing
+     * @returns The dev breakdown tldr text and the ranks
+     */
+    private static generateDevBreakdown(deliverables: any[any], compareTime: number, scheduledDeliverables: any[any], publish: boolean = false): { breakdown: string; deliverableRanks: any; } {
+        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
+        const deliverableRanks = [];
+        deliverableTimes.forEach(dt => {
+            let time = 0;
+            const members = [];
+            let partTime = 0;
+            dt.forEach(ta => {
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
+                if(ta.partialTime) {
+                    members[ta.disciplineUuid].partialTime = true;
+                    partTime++;
+                }
+            });
+            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
+            const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
+                adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
+        });
+        const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
+        // TODO - user parttime percentage to help adjust dev numbers
+        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
+        const publishBreak = publish?'<br/>':'';
+
+        const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
+        const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
+        
+        //const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
+        const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
+
+        let squadronDevs = 0;
+        let squadronDays = 0;
+        squadronTimes.forEach(dt => {
+            let time = 0;
+            const members = [];
+            dt.forEach(ta => {
+                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
+                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
+                if(ta.partialTime) {
+                    members[ta.disciplineUuid].partialTime = true;
+                }
+            });
+            squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
+            squadronDays += GeneralHelpers.convertMillisecondsToDays(time)/3;// split days down to 8 hours rather than 24
+        });
+
+        squadronDays = Math.round(squadronDays);
+        squadronDevs = Math.round(squadronDevs);
+
+        return {breakdown: GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${this.HiredDevs}, or ${Math.round(adjustedTotalDevs/this.HiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
+            `Of those deliverables, ${Math.round(squadronNum.length/deliverables.length*100)}% are for SQ42 exclusively, `+
+            `with ~${squadronDevs} devs (${Math.round(squadronDevs/this.HiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/deliverables.length*100)}% `+
+            `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`), deliverableRanks: deliverableRanks};
+    }
+
+    /**
      * Generates a markdown card image for display along with detected changes. Github size limit for images is 5 MB
      * @param deliverable The deliverable to display a card image for
      * @param oldDeliverable The previous deliverable to check for deltas against
      * @param publish Whether to generate additional YAML
      * @returns The image messages
      */
-     private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
+    private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
         const messages = [];
         if(deliverable.card) {
             if(oldDeliverable.card) {
@@ -1102,59 +1116,34 @@ export abstract class Roadmap {
             tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
         }
         
-        const deliverableTimes = _._(scheduledDeliverables.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
-        const deliverableRanks = [];
-        deliverableTimes.forEach(dt => {
-            let time = 0;
-            const members = [];
-            let partTime = 0;
-            dt.forEach(ta => {
-                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(ta.partialTime) {
-                    members[ta.disciplineUuid].partialTime = true;
-                    partTime++;
-                }
-            });
-            const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
-            const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
-                adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
-        });
-        const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
-        // TODO - user parttime percentage to help adjust dev numbers
-        const adjustedTotalDevs = Math.round(deliverableRanks.reduce((partialSum, a) => partialSum + a.adjustedMembers, 0) / 2); // developers are spread across all time into the future, lots of overlap
-        const publishBreak = publish?'<br/>':'';
+        tldr.push(this.generateDevBreakdown(scheduledDeliverables, compareTime, scheduledDeliverables, publish).breakdown);
 
-        const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
-        const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
-        
-        const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
-        const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
-
-        let squadronDevs = 0;
-        let squadronDays = 0;
-        squadronTimes.forEach(dt => {
-            let time = 0;
-            const members = [];
-            dt.forEach(ta => {
-                time += (ta.endDate - ta.startDate) * (ta.partialTime ? 0.6 : 1);
-                members[ta.disciplineUuid] = {members: ta.numberOfMembers};
-                if(ta.partialTime) {
-                    members[ta.disciplineUuid].partialTime = true;
-                }
-            });
-            squadronDevs += _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            squadronDays += GeneralHelpers.convertMillisecondsToDays(time)/3;// split days down to 8 hours rather than 24
+        //#region Part-time/full-time
+        let partTime = [];
+        let fullTime = [];
+        scheduledDeliverables.forEach(sd => {
+            if(sd.teams) {
+                sd.teams.forEach(t => {
+                    if(t.timeAllocations) {
+                        const teamTimeAllocations = _._(t.timeAllocations).groupBy('team_id').map(v=>v).value();
+                        teamTimeAllocations.forEach(dta => {
+                            const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(dta).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
+                            if(scheduledTimeAllocations.length) {
+                                const teamId = scheduledTimeAllocations[0].team_id;
+                                partTime[teamId] = partTime[teamId] ? partTime[teamId] : 0;
+                                fullTime[teamId] = fullTime[teamId] ? fullTime[teamId] : 0;
+                                const partialTime = _.sumBy(scheduledTimeAllocations, ta => ta.partialTime);
+                                partTime[teamId] += partialTime;
+                                fullTime[teamId] += scheduledTimeAllocations.length - partialTime;
+                            }
+                        });
+                    }
+                });
+            }
         });
 
-        squadronDays = Math.round(squadronDays);
-        squadronDevs = Math.round(squadronDevs);
-
-        tldr.push(GeneralHelpers.shortenText(`There are approximately ${adjustedTotalDevs} devs (out of ~${this.HiredDevs}, or ${Math.round(adjustedTotalDevs/this.HiredDevs*100)}%) with ${totalDevs} assignments scheduled to work on ${deliverableTimes.length} observable deliverables. `+ // no way to determine unique developers
-            `Of those deliverables, ${Math.round(squadronNum.length/scheduledDeliverables.length*100)}% are for SQ42 exclusively, `+
-            `with ~${squadronDevs} devs (${Math.round(squadronDevs/this.HiredDevs*100)}%) scheduled for approximately ${squadronDays} man-days. ${Math.round(bothNum.length/scheduledDeliverables.length*100)}% `+
-            `of deliverables are shared between both projects. ${publishBreak}${publishBreak}  \n`));
+        //Object.keys(arr)
+        //#endregion
 
         if(publish) {
             tldr.push('</details>');
