@@ -1009,6 +1009,17 @@ export abstract class Roadmap {
         // }
     }
 
+    /**
+     * Generates a report the ships being worked on at the given time
+     * @param compareTime The time to lookup time allocations with
+     * @param deliverables The list of deliverables to generate the report for
+     * @param db The database connection
+     * @param publish Whether or not to generate the report online display
+     */
+    private static generateShipsReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false) {
+        const ships = deliverables.filter(d => d.description.includes('vehicle.') || d.description.includes("Unannounced Vehicle"));
+    }
+
     //#region Generate Schedule Deliverables Report
     /**
      * Generates a report for the items being worked on at the given time
@@ -1048,8 +1059,10 @@ export abstract class Roadmap {
         const outroDesc = "The load calculation is an approximation based on the sum of the part-time and full-time tasks (averaged at 80 hours to complete a piece) divided by the team capacity (with a focus factor of 60%) over the given time period. "+
             "Without exact hourly estimates for each task, a more accurate assessment doesn't seem likely, so interpret the load as a given dev group's general utilization on a deliverable.";
         if(publish) {
-            messages.push(`### ${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
-            `an overview of the schedule breakdown of each team in week long segments. <br/><br/> ${outroDesc} ###  \n`);
+            messages.push(`${introDesc} For a better look at this, clicking the team name (or one of the completion dates listed below it) will display a rendering of the current waterfall chart iteration. This chart provides `+
+                `an overview of the schedule breakdown of each team in week long segments. <br/><br/> The timeslots you see on the RSI website are actually fragmented into many smaller sections, usually two week sprints. I do my best `+
+                `to combine relevant timespans by looking for overlaps (4 days currently). If a team says they end earlier than you expect, it means that there is some sizeable period of time between then and the next time they start `+
+                `working on the deliverable again. <br/><br/> ${outroDesc}  \n  \n`);
         } else {
             messages.push(GeneralHelpers.shortenText(`${introDesc}  \n  \n${outroDesc}\n`));
         }
