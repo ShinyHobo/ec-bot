@@ -1120,23 +1120,29 @@ export abstract class Roadmap {
 
         //#region Part-time/full-time
         const teams = _.uniqBy(scheduledDeliverables.flatMap(d => d.teams), 'id');
-        const partTime = [];
-        const fullTime = [];
+        const teamPartTime = [];
+        const teamFullTime = [];
+        const teamSC = [];
+        const teamSQ42 = [];
         scheduledDeliverables.forEach(sd => {
             if(sd.teams) {
                 sd.teams.forEach(t => {
+                    teamSC[t.id] = teamSC[t.id] ? teamSC[t.id] : 0;
+                    teamSQ42[t.id] = teamSQ42[t.id] ? teamSQ42[t.id] : 0;
+                    teamSC[t.id] += sd.project_ids.includes('SC');
+                    teamSQ42[t.id] += sd.project_ids.includes('SQ42');
+                    // TODO - adjust percentage based on total number of individual tasks
                     if(t.timeAllocations) {
                         const disciplineSchedules = _._(t.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
-                        //const teamTimeAllocations = _._(t.timeAllocations).groupBy('team_id').map(v=>v).value();
                         disciplineSchedules.forEach(s => {
                             let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                partTime[t.id] = partTime[t.id] ? partTime[t.id] : 0;
-                                fullTime[t.id] = fullTime[t.id] ? fullTime[t.id] : 0;
-                                partTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
-                                fullTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
+                                teamPartTime[t.id] = teamPartTime[t.id] ? teamPartTime[t.id] : 0;
+                                teamFullTime[t.id] = teamFullTime[t.id] ? teamFullTime[t.id] : 0;
+                                teamPartTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
+                                teamFullTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                             }
                         });
                     }
@@ -1145,12 +1151,15 @@ export abstract class Roadmap {
         });
 
         tldr.push(`Below are the time breakdowns for each team:  \n`);
-        partTime.forEach((pt, ti) => {
+        teamPartTime.forEach((pt, ti) => {
             const team = teams.find(t => t.id === ti);
-            const tasks = pt+fullTime[ti];
+            const tasks = pt + teamFullTime[ti];
             const taskPercent = Math.round(pt / tasks * 100);
             const taskText = taskPercent ? `${taskPercent}% part-time` : 'full-time';
-            tldr.push(`${publish?'<br/>':''}* ${team.title} | ${taskText} with ${tasks} task(s) scheduled  \n`);
+            const projectTasks = teamSC[ti] + teamSQ42[ti];
+            const projectPercent = Math.round(teamSC[ti] / projectTasks * 100);
+            const projectText = projectPercent ? `${projectPercent}% of which are for SC` : 'all of which are for SQ42';
+            tldr.push(`${publish?'<br/>':''}* ${team.title} | ${taskText} with ${tasks} task(s) scheduled, ${projectText}  \n`);
         });
         //#endregion
 
