@@ -1119,22 +1119,24 @@ export abstract class Roadmap {
         tldr.push(this.generateDevBreakdown(scheduledDeliverables, compareTime, scheduledDeliverables, publish).breakdown);
 
         //#region Part-time/full-time
-        let partTime = [];
-        let fullTime = [];
+        const teams = _.uniqBy(scheduledDeliverables.flatMap(d => d.teams), 'id');
+        const partTime = [];
+        const fullTime = [];
         scheduledDeliverables.forEach(sd => {
             if(sd.teams) {
                 sd.teams.forEach(t => {
                     if(t.timeAllocations) {
-                        const teamTimeAllocations = _._(t.timeAllocations).groupBy('team_id').map(v=>v).value();
-                        teamTimeAllocations.forEach(dta => {
-                            const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(dta).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
+                        const disciplineSchedules = _._(t.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
+                        //const teamTimeAllocations = _._(t.timeAllocations).groupBy('team_id').map(v=>v).value();
+                        disciplineSchedules.forEach(s => {
+                            let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
+                            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
+                            const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                const teamId = scheduledTimeAllocations[0].team_id;
-                                partTime[teamId] = partTime[teamId] ? partTime[teamId] : 0;
-                                fullTime[teamId] = fullTime[teamId] ? fullTime[teamId] : 0;
-                                const partialTime = _.sumBy(scheduledTimeAllocations, ta => ta.partialTime);
-                                partTime[teamId] += partialTime;
-                                fullTime[teamId] += scheduledTimeAllocations.length - partialTime;
+                                partTime[t.id] = partTime[t.id] ? partTime[t.id] : 0;
+                                fullTime[t.id] = fullTime[t.id] ? fullTime[t.id] : 0;
+                                partTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
+                                fullTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                             }
                         });
                     }
@@ -1142,7 +1144,14 @@ export abstract class Roadmap {
             }
         });
 
-        //Object.keys(arr)
+        tldr.push(`Below are the time breakdowns for each team:  \n`);
+        partTime.forEach((pt, ti) => {
+            const team = teams.find(t => t.id === ti);
+            const tasks = pt+fullTime[ti];
+            const taskPercent = Math.round(pt / tasks * 100);
+            const taskText = taskPercent ? `${taskPercent}% part-time` : 'full-time';
+            tldr.push(`${publish?'<br/>':''}* ${team.title} | ${taskText} with ${tasks} task(s) scheduled  \n`);
+        });
         //#endregion
 
         if(publish) {
