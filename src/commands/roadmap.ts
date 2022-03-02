@@ -1120,18 +1120,10 @@ export abstract class Roadmap {
 
         //#region Part-time/full-time
         const teams = _.uniqBy(scheduledDeliverables.flatMap(d => d.teams), 'id');
-        const teamPartTime = [];
-        const teamFullTime = [];
-        const teamSC = [];
-        const teamSQ42 = [];
+        const teamTimeBreakdowns = [];
         scheduledDeliverables.forEach(sd => {
             if(sd.teams) {
                 sd.teams.forEach(t => {
-                    teamSC[t.id] = teamSC[t.id] ? teamSC[t.id] : 0;
-                    teamSQ42[t.id] = teamSQ42[t.id] ? teamSQ42[t.id] : 0;
-                    teamSC[t.id] += sd.project_ids.includes('SC');
-                    teamSQ42[t.id] += sd.project_ids.includes('SQ42');
-                    // TODO - adjust percentage based on total number of individual tasks
                     if(t.timeAllocations) {
                         const disciplineSchedules = _._(t.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
                         disciplineSchedules.forEach(s => {
@@ -1139,10 +1131,11 @@ export abstract class Roadmap {
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                teamPartTime[t.id] = teamPartTime[t.id] ? teamPartTime[t.id] : 0;
-                                teamFullTime[t.id] = teamFullTime[t.id] ? teamFullTime[t.id] : 0;
-                                teamPartTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
-                                teamFullTime[t.id] += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
+                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ? teamTimeBreakdowns[t.id] : {full: 0, part: 0, sc: 0, sq42: 0};
+                                teamTimeBreakdowns[t.id].full += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
+                                teamTimeBreakdowns[t.id].part += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
+                                teamTimeBreakdowns[t.id].sc += sd.project_ids.includes('SC');
+                                teamTimeBreakdowns[t.id].sq42 += sd.project_ids.includes('SQ42');
                             }
                         });
                     }
@@ -1151,14 +1144,14 @@ export abstract class Roadmap {
         });
 
         tldr.push(`Below are the time breakdowns for each team:  \n`);
-        teamPartTime.forEach((pt, ti) => {
+        teamTimeBreakdowns.forEach((tb, ti) => {
             const team = teams.find(t => t.id === ti);
-            const tasks = pt + teamFullTime[ti];
-            const taskPercent = Math.round(pt / tasks * 100);
+            const tasks = tb.full + tb.part;
+            const taskPercent = Math.round(tb.part / tasks * 100);
             const taskText = taskPercent ? `${taskPercent}% part-time` : 'full-time';
-            const projectTasks = teamSC[ti] + teamSQ42[ti];
-            const projectPercent = Math.round(teamSC[ti] / projectTasks * 100);
-            const projectText = projectPercent ? `${projectPercent}% of which are for SC` : 'all of which are for SQ42';
+            const projectTasks = tb.sc + tb.sq42;
+            const projectPercent = Math.round(tb.sq42 / projectTasks * 100);
+            const projectText = projectPercent ? (projectPercent === 100 ? 'all of which are for SQ42' : `${projectPercent}% of which are for SQ42`) : 'all of which are for SC';
             tldr.push(`${publish?'<br/>':''}* ${team.title} | ${taskText} with ${tasks} task(s) scheduled, ${projectText}  \n`);
         });
         //#endregion
