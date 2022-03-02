@@ -1154,7 +1154,7 @@ export abstract class Roadmap {
             const projectTasks = tb.sc + tb.sq42;
             const projectPercent = Math.round(tb.sq42 / projectTasks * 100);
             const projectText = projectPercent ? (projectPercent === 100 ? 'all of which are for SQ42' : `${projectPercent}% of which are for SQ42`) : 'all of which are for SC';
-            tldr.push(`${publish?'<li>':'* '}${tb.title} | ${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
+            tldr.push(`${publish?'<li>':'* '}${tb.title}${publish?'<br/>':' | '}${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
         });
         if(publish) {
             tldr.push('</ul>');
