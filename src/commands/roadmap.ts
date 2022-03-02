@@ -1131,7 +1131,7 @@ export abstract class Roadmap {
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ? teamTimeBreakdowns[t.id] : {full: 0, part: 0, sc: 0, sq42: 0};
+                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0};
                                 teamTimeBreakdowns[t.id].full += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                                 teamTimeBreakdowns[t.id].part += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
                                 teamTimeBreakdowns[t.id].sc += sd.project_ids.includes('SC');
