@@ -466,7 +466,7 @@ export abstract class Roadmap {
     //#region Generate Progress Tracker Delta Report
     /**
      * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
-     * @param argv The available arguments [TODO]
+     * @param argv The available arguments
      * @param msg The command message
      * @param db The database connection
      */
@@ -839,8 +839,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('<ol class="ranked-deliverables">');
         }
-
-        // TODO - consolidate code
+        
         rankedTimes.forEach(ttt => {
             const partTimeText = ttt.partTimePercent ? `${ttt.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
@@ -1131,7 +1130,7 @@ export abstract class Roadmap {
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0};
+                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0, id: t.id, title: t.title};
                                 teamTimeBreakdowns[t.id].full += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                                 teamTimeBreakdowns[t.id].part += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
                                 teamTimeBreakdowns[t.id].sc += sd.project_ids.includes('SC');
@@ -1144,16 +1143,22 @@ export abstract class Roadmap {
         });
 
         tldr.push(`Below are the time breakdowns for each team:  \n`);
-        teamTimeBreakdowns.forEach((tb, ti) => {
-            const team = teams.find(t => t.id === ti);
+        if(publish) {
+            tldr.push('<ul>');
+        }
+        
+        _.orderBy(teamTimeBreakdowns.filter(tb => tb), [tb => tb.title.toLowerCase()], ['asc']).forEach(tb => {
             const tasks = tb.full + tb.part;
             const taskPercent = Math.round(tb.part / tasks * 100);
             const taskText = taskPercent ? `${taskPercent}% part-time` : 'full-time';
             const projectTasks = tb.sc + tb.sq42;
             const projectPercent = Math.round(tb.sq42 / projectTasks * 100);
             const projectText = projectPercent ? (projectPercent === 100 ? 'all of which are for SQ42' : `${projectPercent}% of which are for SQ42`) : 'all of which are for SC';
-            tldr.push(`${publish?'<br/>':''}* ${team.title} | ${taskText} with ${tasks} task(s) scheduled, ${projectText}  \n`);
+            tldr.push(`${publish?'<li>':'* '}${tb.title} | ${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
         });
+        if(publish) {
+            tldr.push('</ul>');
+        }
         //#endregion
 
         if(publish) {
