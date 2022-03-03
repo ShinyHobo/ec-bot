@@ -1346,16 +1346,16 @@ export abstract class Roadmap {
             const json = JSON.stringify(deliverablesToExport);
 
             if(discord && this.AllowExportSnapshotsToDiscord) {
-                await GeneralHelpers.sendTextMessageFile([json], filename, msg, false);
+                GeneralHelpers.sendTextMessageFile([json], filename, msg, false);
             } else {
                 // save to local directory
-                await fs.writeFile(path.join(__dirname, '..', 'data_exports', filename), json, () => {});
+                const data_exports = path.join(__dirname, '..', 'data_exports');
+                await fs.mkdir(data_exports, { recursive: true }, (err) => {
+                    if (err) throw err;
+                  });
+                fs.writeFile(path.join(data_exports, filename), json, () => {msg.channel.send('Export complete.');});
             }
         });
-        
-        if(!discord) {
-            await msg.channel.send('Export complete.');
-        }
     }
 
     //#region Helper methods
