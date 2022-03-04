@@ -61,7 +61,7 @@ export abstract class Roadmap {
                 this.generateProgressTrackerDeltaReport(args, msg, db);
                 break;
             case 'teams':
-                this.lookup(["-t", ...args], msg, db);
+                this.lookup(args, msg, db);
                 break;
             case 'export':
                 this.exportJson(args, msg, db, true);
@@ -983,15 +983,15 @@ export abstract class Roadmap {
      */
     private static lookup(argv: Array<string>, msg: Message, db: Database) {
         const args = require('minimist')(argv);
-        if('t' in args) {
+        if(args['_'][0] === 'teams') {
             let compareTime = null;
-            if(args['t'] === 'teams') {
+            if(!args['t']) {
                 compareTime = Date.now();
             } else {
-                compareTime = GeneralHelpers.convertDateToTime(args['t']);
+                compareTime = GeneralHelpers.convertDateToTime(args['t'].toString());
             }
 
-            if(Number(compareTime)) {
+            if(Number(compareTime) && compareTime > 0) {
                 const deliverables = this.buildDeliverables(compareTime, db, true);
                 const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
                 if(!messages.length) {
