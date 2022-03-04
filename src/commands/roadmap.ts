@@ -1045,16 +1045,20 @@ export abstract class Roadmap {
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
         const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').map(t => t.id).toString();
-        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE startDate <= ${compareTime} AND ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
-        const currentTasks = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
+        
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const lookForward = 86400000 * 14; // two weeks
+        const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
+        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
+        const currentDeliverableIds = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
 
-        if(!currentTasks.length) {
+        if(!currentDeliverableIds.length) {
             return messages;
         }
 
-        const scheduledDeliverables = deliverables.filter(l => currentTasks.some(ct => ct.did === l.id));
-        const groupedTasks = _.groupBy(scheduledTasks, 'deliverable_id');
-        const teamTasks = _._(scheduledTasks).groupBy('team_id').map(v=>v).value();
+        const scheduledDeliverables = deliverables.filter(l => currentDeliverableIds.some(ct => ct.did === l.id));
+        const groupedTasks = _.groupBy(currentTasks, 'deliverable_id');
+        const teamTasks = _._(currentTasks).groupBy('team_id').map(v=>v).value();
 
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate).sort((a,b)=>b-a))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
@@ -1064,7 +1068,7 @@ export abstract class Roadmap {
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
-        messages.push(`## There ${past?'were':'are currently'} ${currentTasks.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${currentDeliverableIds.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
