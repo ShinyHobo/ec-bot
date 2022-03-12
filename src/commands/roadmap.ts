@@ -1055,17 +1055,16 @@ export abstract class Roadmap {
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
         const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
-        const scheduledDeliverables = deliverables.filter(d => Object.keys(currentDisciplineSchedules).some(k => k == d.id));
+        const scheduledDeliverables = deliverables.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
         const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime);
-        const scheduledFutureDeliverables = deliverables.filter(d => Object.keys(futureDisciplineSchedules).some(k => k == d.id));
+        const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
             return messages;
         }
 
-        const groupedTasks = _.groupBy(currentTasks, 'deliverable_id');
         const teamTasks = _._(currentTasks).groupBy('team_id').map(v=>v).value();
 
         let deltas = this.getDeliverableDeltaDateList(db);
@@ -1077,6 +1076,9 @@ export abstract class Roadmap {
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
+
+        // TODO list deliverables to start with teams
+
         messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
@@ -1098,21 +1100,18 @@ export abstract class Roadmap {
         messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
         //#endregion
 
-        scheduledDeliverables.forEach((d) => {
-            const schedules = groupedTasks[d.id];
-            if(schedules) {
-                const title = d.title.includes("Unannounced") ? d.description : d.title;
-                if(publish) {
-                    messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
-                } else {
-                    messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
-                }
-                
-                const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
-                teams.forEach((mt, i) => {
-                    messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
-                });
+        scheduledDeliverables.forEach(d => {
+            const title = d.title.includes("Unannounced") ? d.description : d.title;
+            if(publish) {
+                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
+            } else {
+                messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
             }
+
+            const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+            schedule.teams.forEach((mt, i) => {
+                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
+            });
         });
 
         return messages;
@@ -1192,26 +1191,30 @@ export abstract class Roadmap {
         const scheduledDeliverables = deliverables.filter(d => groupedTasks[d.id]);
         scheduledDeliverables.forEach(d => {
             const teams = _.orderBy(d.teams.filter(mt => groupedTasks[d.id].some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
+            const schedule = {deliverable_id: d.id, teams: []};
             teams.forEach(team => {
                 const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
+                const teamSchedule = {...team, schedules: []};
                 disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
                     // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
                     // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
                     let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
                     sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                     const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints).filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-                    if(mergedSchedules.length) {
-                        mergedDisciplineSchedules.push(mergedSchedules);
-                    }
+                    teamSchedule.schedules.push({merged: mergedSchedules, sprints: sprints});
                 });
+                schedule.teams.push(teamSchedule);
             });
+            if(schedule.teams.length) {
+                mergedDisciplineSchedules.push(schedule);
+            }
         });
 
-        return _.groupBy(mergedDisciplineSchedules, mds => mds[0].deliverable_id);
+        return mergedDisciplineSchedules;
     }
 
     /**
-     * Generates a text based waterfall chart displaying weeks
+     * Generates a text based waterfall chart displaying weeks for a given team
      * @param team The team
      * @param compareTime The time to generate the chart around (yearly)
      * @param publish Whether to generate the waterfall chart or just the details
@@ -1223,22 +1226,14 @@ export abstract class Roadmap {
 
         timelines.push(publish ? `<details><summary>${publish?'<ul><li>':''}${team.title.trim()} ${timelines}<br/>\n` : `* ${team.title.trim()}  \n`);
 
-        const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
-        disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
-            // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
-            // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
-            let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
-            sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
-            const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints);
-            const matchMergedSchedules = mergedSchedules.filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-            
+        team.schedules.forEach(ds => {
             if(publish) {
                 const time = new Date(compareTime);
                 const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
                 const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
                 let newWaterfall = [];
                 
-                sprints.forEach((sprint) => {
+                ds.sprints.forEach((sprint) => {
                     let start  = new Date(sprint.startDate);
                     start = start < firstOfYear ? firstOfYear : start;
                     const end = new Date(sprint.endDate);
@@ -1258,7 +1253,7 @@ export abstract class Roadmap {
                 if(newWaterfall.length) {
                     const weekType = newWaterfall[thisWeek - 1];
                     const day = time.getDay();
-
+    
                     if(weekType === '==') {
                         newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
                     } else if((weekType === '~~')){
@@ -1266,19 +1261,19 @@ export abstract class Roadmap {
                     } else {
                         newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
                     }
-
+    
                     waterfalls.push(newWaterfall.join(''));
                 }
                 
                 // descriptions for the current weeks in descending order of display
-                matchMergedSchedules.forEach(ms => {
+                ds.merged.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
                     timelines.push(`${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
                         ` thru ${new Date(ms.endDate).toDateString()}<br/>\n`);
                 });
             } else {
-                matchMergedSchedules.forEach(ms => {
+                ds.merged.forEach(ms => {
                     const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
                     const tasks = ms.fullTime + ms.partTime;
                     timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
@@ -1286,6 +1281,7 @@ export abstract class Roadmap {
                 });
             }
         });
+
         timelines.push(`${publish?'</li></ul>':''}\n`);
         return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
