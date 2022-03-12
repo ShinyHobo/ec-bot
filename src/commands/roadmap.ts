@@ -988,7 +988,10 @@ export abstract class Roadmap {
             if(!args['t']) {
                 compareTime = Date.now();
             } else {
-                compareTime = GeneralHelpers.convertDateToTime(args['t'].toString());
+                // the pull time is not currently saved as the beginning of the day
+                const deltas = this.getDeliverableDeltaDateList(db);
+                const latestPull =  GeneralHelpers.convertTimeToHyphenatedDate(deltas && deltas[0], false);
+                compareTime = latestPull === args['t'].toString() ? deltas[0] : GeneralHelpers.convertDateToTime(args['t'].toString());
             }
 
             if(Number(compareTime) && compareTime > 0) {
@@ -1050,7 +1053,7 @@ export abstract class Roadmap {
         const lookForward = 86400000 * 14; // two weeks
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
         const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
-        const currentDeliverableIds = _.uniqBy(scheduledTasks.map(t => ({did: t.deliverable_id})), 'did');
+        const currentDeliverableIds = _.uniqBy(currentTasks.map(t => ({did: t.deliverable_id})), 'did');
 
         if(!currentDeliverableIds.length) {
             return messages;
@@ -1090,17 +1093,19 @@ export abstract class Roadmap {
 
         scheduledDeliverables.forEach((d) => {
             const schedules = groupedTasks[d.id];
-            const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
-            const title = d.title.includes("Unannounced") ? d.description : d.title;
-            if(publish) {
-                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
-            } else {
-                messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
+            if(schedules) {
+                const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
+                const title = d.title.includes("Unannounced") ? d.description : d.title;
+                if(publish) {
+                    messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
+                } else {
+                    messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
+                }
+                
+                teams.forEach((mt, i) => {
+                    messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
+                });
             }
-            
-            teams.forEach((mt, i) => {
-                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
-            });
         });
 
         return messages;

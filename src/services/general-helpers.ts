@@ -28,14 +28,15 @@ export default abstract class GeneralHelpers {
     /**
      * Converts time in milliseconds to a date string in YYYY-MM-DD format
      * @param time The time in milliseconds to convert
+     * @param hyphenate Whether to include hyphens
      * @returns The date string in YYYY-MM-DD format
      */
-    public static convertTimeToHyphenatedDate(time: number): string {
+    public static convertTimeToHyphenatedDate(time: number, hyphenate: boolean = true): string {
         const date = new Date(time);
         const year = date.getFullYear();
         const month = ("0" + (date.getMonth() + 1)).slice(-2);
         const day = ("0" + date.getDate()).slice(-2);
-        return `${year}-${month}-${day}`;
+        return `${year}${hyphenate?'-':''}${month}${hyphenate?'-':''}${day}`;
     }
 
     /**
