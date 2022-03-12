@@ -1047,31 +1047,37 @@ export abstract class Roadmap {
      */
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
-        const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').map(t => t.id).toString();
+        const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
         
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
         const lookForward = 86400000 * 14; // two weeks
+        
+        // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
-        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
-        const currentDeliverableIds = _.uniqBy(currentTasks.map(t => ({did: t.deliverable_id})), 'did');
+        const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
+        const scheduledDeliverables = deliverables.filter(d => Object.keys(currentDisciplineSchedules).some(k => k == d.id));
 
-        if(!currentDeliverableIds.length) {
+        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
+        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime);
+        const scheduledFutureDeliverables = deliverables.filter(d => Object.keys(futureDisciplineSchedules).some(k => k == d.id));
+
+        if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
             return messages;
         }
 
-        const scheduledDeliverables = deliverables.filter(l => currentDeliverableIds.some(ct => ct.did === l.id));
         const groupedTasks = _.groupBy(currentTasks, 'deliverable_id');
         const teamTasks = _._(currentTasks).groupBy('team_id').map(v=>v).value();
 
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate).sort((a,b)=>b-a))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
+        //#region Preamble
         if(publish) {
             messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
-        messages.push(`## There ${past?'were':'are currently'} ${currentDeliverableIds.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
@@ -1090,11 +1096,11 @@ export abstract class Roadmap {
         messages.push("---  \n");
 
         messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
+        //#endregion
 
         scheduledDeliverables.forEach((d) => {
             const schedules = groupedTasks[d.id];
             if(schedules) {
-                const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
                 const title = d.title.includes("Unannounced") ? d.description : d.title;
                 if(publish) {
                     messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
@@ -1102,6 +1108,7 @@ export abstract class Roadmap {
                     messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
                 }
                 
+                const teams = _.orderBy(d.teams.filter(mt => schedules.some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
                 teams.forEach((mt, i) => {
                     messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
                 });
@@ -1177,6 +1184,30 @@ export abstract class Roadmap {
         tldr.push("---  \n");
 
         return tldr;
+    }
+
+    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime) {
+        const groupedTasks = _.groupBy(tasks, 'deliverable_id');
+        const mergedDisciplineSchedules = [];
+        const scheduledDeliverables = deliverables.filter(d => groupedTasks[d.id]);
+        scheduledDeliverables.forEach(d => {
+            const teams = _.orderBy(d.teams.filter(mt => groupedTasks[d.id].some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
+            teams.forEach(team => {
+                const disciplineSchedules = _._(team.timeAllocations).groupBy((time) => time.disciplineUuid).map(v=>v).value();
+                disciplineSchedules.forEach(s => { // generate mergeDateRanges for each discipline
+                    // I believe it is likely that because there can be more duplicate time entries for a given scheduled period than there are assigned members means each represent
+                    // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
+                    let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
+                    sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
+                    const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints).filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
+                    if(mergedSchedules.length) {
+                        mergedDisciplineSchedules.push(mergedSchedules);
+                    }
+                });
+            });
+        });
+
+        return _.groupBy(mergedDisciplineSchedules, mds => mds[0].deliverable_id);
     }
 
     /**
