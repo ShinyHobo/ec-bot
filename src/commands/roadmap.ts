@@ -1107,6 +1107,8 @@ export abstract class Roadmap {
         messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
         //#endregion
 
+        // TODO - consolidate the following code:
+
         scheduledDeliverables.forEach(d => {
             const title = d.title.includes("Unannounced") ? d.description : d.title;
             if(publish) {
@@ -1116,6 +1118,9 @@ export abstract class Roadmap {
             }
             if(compareTime-lookForwardOrBack<=d.startDate) {
                 messages.push(`#### (Recently started!) ####  \n`);
+            }
+            if(d.endDate<=compareTime+lookForwardOrBack) {
+                messages.push(`#### (Scheduled work ending soon!) ####  \n`);
             }
 
             const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
@@ -1144,6 +1149,9 @@ export abstract class Roadmap {
             if(compareTime-lookForwardOrBack<=d.startDate) {
                 messages.push(`#### (Starting soon!) ####  \n`);
             }
+            if(d.endDate<=compareTime+lookForwardOrBack) {
+                messages.push(`#### (Scheduled work ending soon!) ####  \n`);
+            }
             
             const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
 
@@ -1171,7 +1179,7 @@ export abstract class Roadmap {
         tldr.push(this.generateDevBreakdown(scheduledDeliverables, compareTime, scheduledDeliverables, publish).breakdown);
 
         //#region Part-time/full-time
-        const teams = _.uniqBy(scheduledDeliverables.flatMap(d => d.teams), 'id');
+        //const teams = _.uniqBy(scheduledDeliverables.flatMap(d => d.teams), 'id');
         const teamTimeBreakdowns = [];
         scheduledDeliverables.forEach(sd => {
             if(sd.teams) {
@@ -1194,6 +1202,25 @@ export abstract class Roadmap {
                 });
             }
         });
+
+        const endingSoon = scheduledDeliverables.filter(sd => sd.endDate <= compareTime + (86400000 * 14));
+        if(endingSoon.length) {
+            tldr.push(`${endingSoon.length} deliverable(s) are not currently scheduled to continue work after this sprint:  \n`);
+            if(publish) {
+                tldr.push('<ul>');
+            }
+            endingSoon.forEach(es => {
+                const title = es.title.includes("Unannounced") ? es.description : es.title;
+                if(publish) {
+                    tldr.push(`  \n${publish?'<li>':'* '} <a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${es.slug}" target="_blank">${title.trim()}</a> ${RSINetwork.generateProjectIcons(es)}${publish?'</li>':''}  \n`);
+                } else {
+                    tldr.push(`  \n${publish?'<li>':'* '} ${title.trim()} [${es.project_ids.replace(',', ', ')}]${publish?'</li>':''}  \n`);
+                }
+            });
+            if(publish) {
+                tldr.push('</ul>');
+            }
+        }
 
         tldr.push(`Below are the time breakdowns for each team:  \n`);
         if(publish) {
