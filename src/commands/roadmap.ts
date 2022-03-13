@@ -1302,23 +1302,17 @@ export abstract class Roadmap {
                         const weightedTimePercent = (sprint.fullTime + sprint.partTime * .5) / (sprint.fullTime + sprint.partTime);
                         const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
                         const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                        const fill = weightedTimePercent > .8 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
-                        const period = new Array(endWeek + 1 - startWeek).fill(fill);
+                        let fill = weightedTimePercent > .8 ? '=' : '~'; // Thought about using ≈, but its too easily confused with =
+                        const period = new Array(endWeek + 1 - startWeek).fill(fill+fill);
+                        period[0] = (5<start.getDay()?'.':fill) + fill;
+                        period[period.length-1] = fill + (end.getDay()<3?'.':fill);
                         newWaterfall.splice(startWeek - 1, period.length, ...period);
                     });
                     if(newWaterfall.length) {
                         const weekType = newWaterfall[thisWeek - 1];
                         const day = time.getDay();
-                        // if(weekType === '==') {
-                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|=':'=|');
-                        // } else if((weekType === '~~')){
-                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|~':'~|');
-                        // } else {
-                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|.':'.|');
-                        // }
-                        const alteredWeek = (day<4?'|':weekType[0]) + (4<=day?'|':weekType[1]);
+                        const alteredWeek = (day<5?'|':weekType[0]) + (5<=day?'|':weekType[1]);
                         newWaterfall.splice(thisWeek - 1, 1, alteredWeek);
-
                         waterfalls.push(newWaterfall.join(''));
                     }
                 }
