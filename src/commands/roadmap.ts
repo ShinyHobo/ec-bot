@@ -518,7 +518,7 @@ export abstract class Roadmap {
             removedDeliverables.forEach(d => {
                 const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
                 messages.push(he.unescape(`### **${d.title.trim()}** ${args['publish']?RSINetwork.generateProjectIcons(d):''} ###  \n`.toString()));
-                messages.push(`*Last scheduled from ${new Date(d.startDate).toDateString()} to ${new Date(d.endDate).toDateString()}*  \n`);
+                messages.push(`*Last scheduled from ${GeneralHelpers.convertTimeToHyphenatedDate(d.startDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(d.endDate)}*  \n`);
                 messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
 
                 if(dMatch.teams) {
@@ -554,8 +554,8 @@ export abstract class Roadmap {
                 if(dMatch) {
                     changes.readded++;
                 }
-                const start = new Date(d.startDate).toDateString();
-                const end = new Date(d.endDate).toDateString();
+                const start = GeneralHelpers.convertTimeToHyphenatedDate(d.startDate);
+                const end = GeneralHelpers.convertTimeToHyphenatedDate(d.endDate);
                 if(args['publish']) {
                     messages.push(he.unescape(`### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${d.title.trim()}</a>**${dMatch?` (returning!)`:''} ${RSINetwork.generateProjectIcons(d)} ###  \n`.toString()));
                 } else {
@@ -569,7 +569,7 @@ export abstract class Roadmap {
                     _.orderBy(d.teams, [t => t.title.toLowerCase()], ['asc']).forEach(t => {
                         const starting = t.timeAllocations.sort((a,b) => a.startDate - b.startDate)[0];
                         const startingText = starting.startDate < compareTime ? `began work` : `will begin work`;
-                        messages.push(`* ${t.title} ${startingText} ${new Date(starting.startDate).toDateString()}  \n`);
+                        messages.push(`* ${t.title} ${startingText} ${GeneralHelpers.convertTimeToHyphenatedDate(starting.startDate)}  \n`);
 
                         const disciplineSchedules = _._(t.timeAllocations).groupBy('title').map(v=>v).value();
                         disciplineSchedules.forEach(ds => {
@@ -728,7 +728,7 @@ export abstract class Roadmap {
                                 deltaHeader.push(`### **${title.trim()}** ###  \n`);
                             }
 
-                            deltaHeader.push(`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
+                            deltaHeader.push(`*${GeneralHelpers.convertTimeToHyphenatedDate(l.startDate)} => ${GeneralHelpers.convertTimeToHyphenatedDate(l.endDate)}*  \n`);
 
                             updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
 
@@ -771,7 +771,7 @@ export abstract class Roadmap {
      */
     private static generateDeltaTldr(changes: any[number], first: any[], last: any[], start: number, end: number, compareTime: number, publish: boolean = false): any[] {
         const tldr = [];
-        tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${new Date(start).toDateString()} => ${new Date(end).toDateString()} ###  \n`);
+        tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${GeneralHelpers.convertTimeToHyphenatedDate(start)} => ${GeneralHelpers.convertTimeToHyphenatedDate(end)} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
         tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
 
@@ -1303,15 +1303,15 @@ export abstract class Roadmap {
                 const continuingWork = futureTeam && futureTeam.schedules.find(fts => fts.merged.title === ds.merged.title && fts.merged.id !== ds.merged.id);
                 if(ds.merged.startDate <= compareTime) {
                     timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
-                    ` thru ${new Date(ds.merged.endDate).toDateString()}${publish?'<br/>':''}\n`);
+                    ` thru ${GeneralHelpers.convertTimeToHyphenatedDate(ds.merged.endDate)}${publish?'<br/>':''}\n`);
 
                     // check for continuing work here
                     if(continuingWork) {
-                        timelines.push(`↳ will continue ${new Date(continuingWork.startDate).toDateString()} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
+                        timelines.push(`↳ will continue ${GeneralHelpers.convertTimeToHyphenatedDate(continuingWork.startDate)} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
                     }
                 } else if(!continuingWork) { // list future work
                     timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} will work on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
-                    ` starting ${new Date(ds.merged.startDate).toDateString()} thru ${new Date(ds.merged.endDate).toDateString()}${publish?'<br/>':''}\n`);
+                    ` starting ${GeneralHelpers.convertTimeToHyphenatedDate(ds.merged.startDate)} thru ${GeneralHelpers.convertTimeToHyphenatedDate(ds.merged.endDate)}${publish?'<br/>':''}\n`);
                 }
             }
         });
