@@ -28,14 +28,15 @@ export default abstract class GeneralHelpers {
     /**
      * Converts time in milliseconds to a date string in YYYY-MM-DD format
      * @param time The time in milliseconds to convert
+     * @param hyphenate Whether to include hyphens
      * @returns The date string in YYYY-MM-DD format
      */
-    public static convertTimeToHyphenatedDate(time: number): string {
+    public static convertTimeToHyphenatedDate(time: number, hyphenate: boolean = true): string {
         const date = new Date(time);
         const year = date.getFullYear();
         const month = ("0" + (date.getMonth() + 1)).slice(-2);
         const day = ("0" + date.getDate()).slice(-2);
-        return `${year}-${month}-${day}`;
+        return `${year}${hyphenate?'-':''}${month}${hyphenate?'-':''}${day}`;
     }
 
     /**
@@ -80,6 +81,9 @@ export default abstract class GeneralHelpers {
      * @returns The merged date ranges
      */
     public static mergeDateRanges(ranges) {
+        if(!ranges) {
+            return [];
+        }
         ranges = ranges.sort((a,b) => a.startDate - b.startDate);
 
         let returnRanges = [];
@@ -104,8 +108,10 @@ export default abstract class GeneralHelpers {
                 currentRange = r;
             } else if (currentRange.endDate < r.endDate) {
                 currentRange.endDate = r.endDate;
-                currentRange.partTime += r.partTime;
-                currentRange.fullTime += r.fullTime;
+                currentRange.partTime = typeof currentRange.partTime == 'number' ? currentRange.partTime : 0;
+                currentRange.fullTime = typeof currentRange.fullTime == 'number' ? currentRange.fullTime : 0;
+                currentRange.partTime += r.partialTime;
+                currentRange.fullTime += Math.abs(1 - r.partialTime);
             }
         });
 
@@ -141,7 +147,7 @@ export default abstract class GeneralHelpers {
      * @param filename The filename to use
      * @param msg The command message
      */
-    public static sendTextMessageFile(messages: string[], filename: string, msg: Message) {
-        msg.channel.send({files: [new MessageAttachment(Buffer.from(_.unescape(messages.join('')), "utf-8"), filename)]}).catch(console.error);
+    public static async sendTextMessageFile(messages: string[], filename: string, msg: Message, unescape: boolean = true) {
+        await msg.channel.send({files: [new MessageAttachment(Buffer.from(unescape ? _.unescape(messages.join('')) : messages.join(''), "utf-8"), filename)]}).catch(console.error);
     }
 }
