@@ -1050,14 +1050,14 @@ export abstract class Roadmap {
         const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
 
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
-        const lookForward = 86400000 * 14; // two weeks
+        const lookForwardOrBack = 86400000 * 14; // two weeks
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
         const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
         const scheduledDeliverables = deliverables.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
-        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
+        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForwardOrBack); // tasks that begin within the next two weeks
         const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, true);
         const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
@@ -1114,6 +1114,9 @@ export abstract class Roadmap {
             } else {
                 messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
             }
+            if(compareTime-lookForwardOrBack<=d.startDate) {
+                messages.push(`#### (Recently started!) ####  \n`);
+            }
 
             const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
             const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
@@ -1128,7 +1131,8 @@ export abstract class Roadmap {
             });
         });
 
-        messages.push(`  \n${publish?'<br/>':''}## The following deliverables are scheduled to begin work within two weeks ##  \n`);
+        messages.push("---\n");
+        messages.push(`  \n## The following deliverables are scheduled to begin (or continue) work within two weeks ##  \n`);
 
         newScheduledDeliverables.forEach(d => {
             const title = d.title.includes("Unannounced") ? d.description : d.title;
@@ -1136,6 +1140,9 @@ export abstract class Roadmap {
                 messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
             } else {
                 messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
+            }
+            if(compareTime-lookForwardOrBack<=d.startDate) {
+                messages.push(`#### (Starting soon!)s ####  \n`);
             }
             
             const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
