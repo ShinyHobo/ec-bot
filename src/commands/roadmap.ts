@@ -15,11 +15,11 @@ export abstract class Roadmap {
     //#region Public properties
     /** The bot base command */
     public static readonly command = '!roadmap';
-    
+
     /** The functionality of the command */
     public static readonly description = 'Keeps track of roadmap changes from week to week. Pull the latest version of the roadmap for today or to compare the latest pull to the previous.';
-    
-    /** 
+
+    /**
      * The bot command pattern
      * --publish can be added to compare and teams to generate extras for website publishing */
     public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
@@ -148,24 +148,24 @@ export abstract class Roadmap {
 
                     let delta = Date.now() - start;
                     console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
-    
+
                     const compareTime = Date.now();
-    
+
                     // populate db with initial values
                     let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
                     if(!deliverableDeltas.count) {
-                        
+
                         const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
                         fs.readdirSync(initializationDataDir).forEach((file) => {
                             const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
                             this.insertChanges(db, GeneralHelpers.convertDateToTime(file), this.adjustData(data));
                         });
                     }
-    
+
                     const newDeliverables = this.adjustData(deliverables);
                     const changes = this.insertChanges(db, compareTime, newDeliverables);
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
-    
+
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
                         const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
                         msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
@@ -225,9 +225,9 @@ export abstract class Roadmap {
         return deliverables;
     }
 
-    /** 
+    /**
      * Generate delta entries for each deliverable and their children (teams, time allocations, release card)
-     * @param db The database connection 
+     * @param db The database connection
      * @param now The time to use for addedTime entries
      * @param deliverables The deliverable entries to add
      * @returns The changes that were detected (addition, removal, modification)
@@ -497,7 +497,7 @@ export abstract class Roadmap {
             const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
             start = dbStart && dbStart.addedDate;
         }
-        
+
         if(!start || !end || start >= end ) {
             return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
         }
@@ -522,7 +522,7 @@ export abstract class Roadmap {
                 messages.push(he.unescape(GeneralHelpers.shortenText(`${d.description}  \n`)));
 
                 if(dMatch.teams) {
-                    
+
                     messages.push(GeneralHelpers.shortenText(`The following team(s) have been freed up:`));
                     const freedTeams = dMatch.teams.filter(t => t.timeAllocations);
                     freedTeams.forEach(ft => {
@@ -575,9 +575,9 @@ export abstract class Roadmap {
                         disciplineSchedules.forEach(ds => {
                             const lLoad = this.generateLoad(ds, compareTime, d);
                             if(lLoad.tasks) {
-                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} tasks (${lLoad.load}% load)  \n`); 
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} tasks (${lLoad.load}% load)  \n`);
                             } else {
-                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} previously completed all available tasks  \n`); 
+                                messages.push(`x${ds[0].numberOfMembers} ${ds[0].title} ${lLoad.devs} previously completed all available tasks  \n`);
                             }
                         });
                     });
@@ -600,7 +600,7 @@ export abstract class Roadmap {
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
                     const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
-                    
+
                     let update = [];
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         if(dChanges.some(p => p.change === 'startDate')) {
@@ -651,7 +651,7 @@ export abstract class Roadmap {
                                 //const lDiff = lt.endDate - lt.startDate; // total timespan for team; irrelevant for deliverable based deltas
                                 const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
                                 const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
-                                //const lDiff = assignedEnd - assignedStart; // total timespan for team, adjusted for assigned time allocations; 
+                                //const lDiff = assignedEnd - assignedStart; // total timespan for team, adjusted for assigned time allocations;
                                 const lDiff = GeneralHelpers.mergeDateRanges(lt.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
 
                                 let showDisciplines = false;
@@ -659,19 +659,19 @@ export abstract class Roadmap {
                                 if(teamMatch) {
                                     const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
                                     const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
-                                        
+
                                     if(tChanges.length) {
                                         //const tmDiff = teamMatch.endDate - teamMatch.startDate; // total timespan for team; irrelavant for deliverable based deltas
                                         const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
                                         const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
-                                        //const tmDiff = tmAssignedEnd - tmAssignedStart; // total timespan for team, adjusted for assigned time allocations; 
+                                        //const tmDiff = tmAssignedEnd - tmAssignedStart; // total timespan for team, adjusted for assigned time allocations;
                                         const tmDiff = GeneralHelpers.mergeDateRanges(teamMatch.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
                                         const timeDiff = lDiff - tmDiff; // positive is more work
                                         const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
                                         const tmDaysRemaining = GeneralHelpers.convertMillisecondsToDays(tmAssignedEnd - (compareTime < tmAssignedStart ? tmAssignedStart : compareTime));
                                         const extraDays = dayDiff - tmDaysRemaining;
                                         const displayDays = extraDays < 0 ? dayDiff : tmDaysRemaining;
-    
+
                                         if(dayDiff) {
                                             if(tmDiff === 0 && dayDiff > 0) {
                                                 update.push(`* ${lt.title} was assigned, ${assignedStart < compareTime ? 'revealing' : 'adding'} ${displayDays} days of work  \n`);
@@ -699,10 +699,10 @@ export abstract class Roadmap {
                                         const fLoad = matchDisciplineSchedule ? this.generateLoad(matchDisciplineSchedule, compareTime, f) : false;
                                         const lLoad = this.generateLoad(ds, compareTime, l);
                                         if(lLoad.tasks) {
-                                            update.push(`x${`${matchDisciplineSchedule && matchDisciplineSchedule[0].numberOfMembers && 
+                                            update.push(`x${`${matchDisciplineSchedule && matchDisciplineSchedule[0].numberOfMembers &&
                                             matchDisciplineSchedule[0].numberOfMembers !== ds[0].numberOfMembers ? `${matchDisciplineSchedule[0].numberOfMembers} => ` : ''}`+
                                             `${ds[0].numberOfMembers}`} ${ds[0].title} ${lLoad.devs} with ${lLoad.tasks} `+
-                                            `tasks (${fLoad && fLoad.load && fLoad.load !== lLoad.load ? `${fLoad.load}% => ` : ''}${lLoad.load}% load)  \n`); 
+                                            `tasks (${fLoad && fLoad.load && fLoad.load !== lLoad.load ? `${fLoad.load}% => ` : ''}${lLoad.load}% load)  \n`);
                                         }
                                     });
                                 }
@@ -727,17 +727,17 @@ export abstract class Roadmap {
                             } else {
                                 deltaHeader.push(`### **${title.trim()}** ###  \n`);
                             }
-                            
+
                             deltaHeader.push(`*${new Date(l.startDate).toDateString()} => ${new Date(l.endDate).toDateString()}*  \n`);
 
                             updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
-                        
+
                             if(f.card && !l.card) {
                                 updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
                             } else if(l.card) {
                                 updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
                             }
-                            
+
                             updatedDeliverables.push(f);
                             changes.updated++;
                         }
@@ -839,7 +839,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('<ol class="ranked-deliverables">');
         }
-        
+
         rankedTimes.forEach(ttt => {
             const partTimeText = ttt.partTimePercent ? `${ttt.partTimePercent}% part-time` : 'full-time';
             const matchDeliverable = scheduledDeliverables.find(d => d.id === ttt.deliverable_id);
@@ -854,7 +854,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('<ol class="ranked-deliverables">');
         }
-        
+
         let rankedDevs = _.orderBy(deliverableRanks, ["totalMembers","partTimePercent"], ['desc','asc']);
         rankedDevs = publish ? rankedDevs : rankedDevs.slice(0,15);
         rankedDevs.forEach(ttd => {
@@ -879,8 +879,8 @@ export abstract class Roadmap {
     }
 
     /**
-     * 
-     * @param deliverables The deliverables for the given time 
+     *
+     * @param deliverables The deliverables for the given time
      * @param compareTime The time to compare to
      * @param scheduledDeliverables The deliverables currently being worked on
      * @param publish Whether or not to generate the breakdown for publishing
@@ -903,7 +903,7 @@ export abstract class Roadmap {
             });
             const totalMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members, 0);
             const adjustedMembers = _.values(members).reduce((partialSum, a) => partialSum + a.members * (a.partialTime ? 0.6 : 1), 0);
-            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers, 
+            deliverableRanks.push({deliverable_id: dt[0].deliverable_id, time: Math.round(GeneralHelpers.convertMillisecondsToDays(time)/3), totalMembers: totalMembers,
                 adjustedMembers: adjustedMembers, tasks: dt.length, partTime: partTime, partTimePercent: Math.round(partTime/dt.length*100)});
         });
         const totalDevs = deliverableRanks.reduce((partialSum, a) => partialSum + a.totalMembers, 0); // assuming all devs are unique
@@ -913,7 +913,7 @@ export abstract class Roadmap {
 
         const squadronNum = scheduledDeliverables.filter(d => d.project_ids === 'SQ42');
         const squadronTimes = _._(squadronNum.filter(sd => sd.teams).flatMap(sd => sd.teams.flatMap(t => t.timeAllocations).filter(ta => ta && ta.endDate > compareTime))).groupBy('deliverable_id').map(v => v).value();
-        
+
         //const puNum = scheduledDeliverables.filter(d => d.project_ids === 'SC');
         const bothNum = scheduledDeliverables.filter(d => d.project_ids === 'SC,SQ42');
 
@@ -1048,18 +1048,21 @@ export abstract class Roadmap {
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
         let messages = [];
         const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
-        
+
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
         const lookForward = 86400000 * 14; // two weeks
-        
+
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
         const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
         const scheduledDeliverables = deliverables.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForward); // tasks that begin within the next two weeks
-        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime);
+        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, true);
         const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
+
+        // deliverables that are not being worked on, but will be in the next two weeks
+        const newScheduledDeliverables = scheduledFutureDeliverables.filter(sfd => !scheduledDeliverables.some(sd => sd.id === sfd.id));
 
         if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
             return messages;
@@ -1109,8 +1112,10 @@ export abstract class Roadmap {
             }
 
             const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+            const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+
             schedule.teams.forEach((mt, i) => {
-                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, publish));
+                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, futureSchedule, publish));
             });
         });
 
@@ -1129,7 +1134,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
         }
-        
+
         tldr.push(this.generateDevBreakdown(scheduledDeliverables, compareTime, scheduledDeliverables, publish).breakdown);
 
         //#region Part-time/full-time
@@ -1161,7 +1166,7 @@ export abstract class Roadmap {
         if(publish) {
             tldr.push('<ul>');
         }
-        
+
         _.orderBy(teamTimeBreakdowns.filter(tb => tb), [tb => tb.title.toLowerCase()], ['asc']).forEach(tb => {
             const tasks = tb.full + tb.part;
             const taskPercent = Math.round(tb.part / tasks * 100);
@@ -1185,9 +1190,18 @@ export abstract class Roadmap {
         return tldr;
     }
 
-    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime) {
+    /**
+     * Gets the discipline schedules and sprints for the given task list
+     * @param deliverables The deliverables to match tasks with
+     * @param tasks The tasks (time allocations) to generate schedule assemblies for
+     * @param compareTime The comparison time
+     * @param futureSchedule Whether to generate the schedule assemblies for the immediate future (next scheduled)
+     * @returns
+     */
+    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime: number, futureSchedule: boolean = false): any[any] {
         const groupedTasks = _.groupBy(tasks, 'deliverable_id');
         const mergedDisciplineSchedules = [];
+        const lookForward = 86400000 * 14;
         const scheduledDeliverables = deliverables.filter(d => groupedTasks[d.id]);
         scheduledDeliverables.forEach(d => {
             const teams = _.orderBy(d.teams.filter(mt => groupedTasks[d.id].some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
@@ -1200,10 +1214,19 @@ export abstract class Roadmap {
                     // a different task in the same two week sprint period. Some have been marked as needing full time attention and others part time.
                     let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
                     sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
-                    const mergedSchedules = GeneralHelpers.mergeDateRanges(sprints).filter(ms => ms.startDate <= compareTime && compareTime <= ms.endDate);
-                    teamSchedule.schedules.push({merged: mergedSchedules, sprints: sprints});
+                    const mergeDateRanges = GeneralHelpers.mergeDateRanges(sprints);
+                    let mergedSchedule = mergeDateRanges.filter(ms => (!futureSchedule && compareTime <= ms.endDate) || (futureSchedule && compareTime < ms.startDate && ms.startDate <= compareTime + lookForward))[0];
+                    if(mergedSchedule && compareTime < mergedSchedule.startDate && !futureSchedule) {
+                        mergedSchedule = null;
+                    }
+                    if(mergedSchedule || !futureSchedule) {
+                        teamSchedule.schedules.push({merged: mergedSchedule, sprints: sprints});
+                    }
                 });
-                schedule.teams.push(teamSchedule);
+                if(teamSchedule.schedules.length || !futureSchedule)
+                {
+                    schedule.teams.push(teamSchedule);
+                }
             });
             if(schedule.teams.length) {
                 mergedDisciplineSchedules.push(schedule);
@@ -1217,72 +1240,83 @@ export abstract class Roadmap {
      * Generates a text based waterfall chart displaying weeks for a given team
      * @param team The team
      * @param compareTime The time to generate the chart around (yearly)
+     * @param futureSchedule The future work that is scheduled
      * @param publish Whether to generate the waterfall chart or just the details
      * @returns A text based, collapsible waterfall chart text block
      */
-     private static generateWaterfallChart(team: any, compareTime, publish: boolean = false): string {
+     private static generateWaterfallChart(team: any, compareTime, futureSchedule: any, publish: boolean = false): string {
         const timelines = [];
         let waterfalls = [];
 
         timelines.push(publish ? `<details><summary>${publish?'<ul><li>':''}${team.title.trim()} ${timelines}<br/>\n` : `* ${team.title.trim()}  \n`);
 
+        const futureTeam = futureSchedule && futureSchedule.teams.find(fs => fs.id === team.id);
+        if(futureTeam) {
+            team.schedules = [...team.schedules, ...futureTeam.schedules];
+        }
         team.schedules.forEach(ds => {
             if(publish) {
                 const time = new Date(compareTime);
                 const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
                 const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
                 let newWaterfall = [];
-                
-                ds.sprints.forEach((sprint) => {
-                    let start  = new Date(sprint.startDate);
-                    start = start < firstOfYear ? firstOfYear : start;
-                    const end = new Date(sprint.endDate);
-                    if(end < start) {
-                        return;
+
+                if(!ds.merged || (ds.merged && ds.merged.startDate <= compareTime)) { // future data should always have merged info (how else would we know it is in the future?)
+                    ds.sprints.forEach((sprint) => {
+                        let start  = new Date(sprint.startDate);
+                        start = start < firstOfYear ? firstOfYear : start;
+                        const end = new Date(sprint.endDate);
+                        if(end < start) {
+                            return;
+                        }
+                        if(!newWaterfall.length) {
+                            newWaterfall = new Array(52).fill('..');
+                        }
+                        const weightedTimePercent = (sprint.fullTime + sprint.partTime * .5) / (sprint.fullTime + sprint.partTime);
+                        const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
+                        const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
+                        const fill = weightedTimePercent > .8 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
+                        const period = new Array(endWeek + 1 - startWeek).fill(fill);
+                        newWaterfall.splice(startWeek - 1, period.length, ...period);
+                    });
+                    if(newWaterfall.length) {
+                        const weekType = newWaterfall[thisWeek - 1];
+                        const day = time.getDay();
+
+                        if(weekType === '==') {
+                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
+                        } else if((weekType === '~~')){
+                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|~':'~|');
+                        } else {
+                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
+                        }
+
+                        waterfalls.push(newWaterfall.join(''));
                     }
-                    if(!newWaterfall.length) {
-                        newWaterfall = new Array(52).fill('..');
-                    }
-                    const weightedTimePercent = (sprint.fullTime + sprint.partTime * .5) / (sprint.fullTime + sprint.partTime);
-                    const startWeek = GeneralHelpers.getWeek(start, firstOfYear);
-                    const endWeek = GeneralHelpers.getWeek(end, firstOfYear);
-                    const fill = weightedTimePercent > .8 ? '==' : '~~'; // Thought about using ≈, but its too easily confused with =
-                    const period = new Array(endWeek + 1 - startWeek).fill(fill);
-                    newWaterfall.splice(startWeek - 1, period.length, ...period);
-                });
-                if(newWaterfall.length) {
-                    const weekType = newWaterfall[thisWeek - 1];
-                    const day = time.getDay();
-    
-                    if(weekType === '==') {
-                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
-                    } else if((weekType === '~~')){
-                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|~':'~|');
-                    } else {
-                        newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
-                    }
-    
-                    waterfalls.push(newWaterfall.join(''));
                 }
-                
-                // descriptions for the current weeks in descending order of display
-                ds.merged.forEach(ms => {
-                    const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
-                    const tasks = ms.fullTime + ms.partTime;
-                    timelines.push(`${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
-                        ` thru ${new Date(ms.endDate).toDateString()}<br/>\n`);
-                });
-            } else {
-                ds.merged.forEach(ms => {
-                    const fullTimePercent = Math.round(this.calculateTaskLoad(ms) * 100);
-                    const tasks = ms.fullTime + ms.partTime;
-                    timelines.push(` - ${ms.numberOfMembers}x ${ms.title} dev${ms.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
-                        ` thru ${new Date(ms.endDate).toDateString()}  \n`);
-                });
+            }
+
+            // descriptions for the current weeks in descending order of display
+            if(ds.merged) {
+                const fullTimePercent = Math.round(this.calculateTaskLoad(ds.merged) * 100);
+                const tasks = ds.merged.fullTime + ds.merged.partTime;
+                const continuingWork = futureTeam && futureTeam.schedules.find(fts => fts.merged.title === ds.merged.title && fts.merged.id !== ds.merged.id);
+                if(ds.merged.startDate <= compareTime) {
+                    timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
+                    ` thru ${new Date(ds.merged.endDate).toDateString()}${publish?'<br/>':''}\n`);
+
+                    // check for continuing work here
+                    if(continuingWork) {
+                        timelines.push(`↳ will continue ${new Date(continuingWork.startDate).toDateString()} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
+                    }
+                } else if(!continuingWork) { // list future work
+                    timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} will work on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
+                    ` starting ${new Date(ds.merged.startDate).toDateString()} thru ${new Date(ds.merged.endDate).toDateString()}${publish?'<br/>':''}\n`);
+                }
             }
         });
 
-        timelines.push(`${publish?'</li></ul>':''}\n`);
+        timelines.push(`${publish?'</li></ul>':''}`);
         return timelines.join('') + (publish ? `</summary><p>${waterfalls.join('<br>')}</p></details>` : '');
     }
     //#endregion
@@ -1298,7 +1332,7 @@ export abstract class Roadmap {
         let exportDates: number[] = [];
 
         const args = require('minimist')(argv.slice(1));
-            
+
         if(args['all'] === true) {
             exportDates = this.getDeliverableDeltaDateList(db);
         } else {
@@ -1460,16 +1494,16 @@ export abstract class Roadmap {
         const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
         const unAnnouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
         dbDeliverables = [...announcedDeliverables, ...unAnnouncedDeliverables];
-        
+
         const cardIds = dbDeliverables.filter((dd) => dd.card_id).map((dd) => dd.card_id).toString();
         const dbCards = db.prepare(`SELECT * FROM card_diff WHERE id IN (${cardIds})`).all();
 
         const deliverableIds = dbDeliverables.map((dd) => dd.id).toString();
-        
+
         const dbDeliverableTeams = db.prepare(`SELECT *, MAX(addedDate) FROM team_diff WHERE addedDate <= ${date} AND id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) GROUP BY slug ORDER BY addedDate DESC`).all();
         const deliverableTeamIds = dbDeliverableTeams.map(dt => dt.id).toString()
         const deliverableTeams = _.groupBy(db.prepare(`SELECT * FROM deliverable_teams WHERE team_id IN (${deliverableTeamIds}) AND deliverable_id IN (${deliverableIds})`).all(), 'deliverable_id');
-        
+
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(ta.addedDate), ta.id AS time_id, ta.uuid AS time_uuid, ta.addedDate AS time_added FROM timeAllocation_diff AS ta JOIN discipline_diff AS di ON di.id = ta.discipline_id`+
         ` WHERE deliverable_id IN (${deliverableIds}) AND team_id IN (${dbDeliverableTeams.map(z => z.id).join(',')}) AND partialTime IS NOT NULL GROUP BY ta.uuid`).all();
         //let teamIds = dbTimeAllocations.map(z => z.team_id).filter((value, index, self) => self.indexOf(value) === index);
