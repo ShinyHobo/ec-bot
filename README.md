@@ -21,4 +21,4 @@ In the console, run the following commands, in order, from the root directory af
 2. `npm install -g ts-node`
 3. `ts-node .\src\index.ts`
 
-If there are module conflicts, delete the node_modules folder and rerun the commands
+If there are module conflicts, delete the node_modules folder and rerun the commands. To run continuously and automatically restart after an error, I suggest using [PM2](https://pm2.keymetrics.io/)

@@ -8,6 +8,15 @@ export default abstract class Migration {
             db.prepare("CREATE TABLE IF NOT EXISTS verification (discord_id TEXT, code TEXT, UNIQUE(discord_id))").run();
             db.prepare("CREATE TABLE IF NOT EXISTS threads(id TEXT, UNIQUE(id))").run();
 
+            if(false) { // debug reset
+                db.prepare("DROP TABLE IF EXISTS deliverable_diff").run();
+                db.prepare("DROP TABLE IF EXISTS team_diff").run();
+                db.prepare("DROP TABLE IF EXISTS deliverable_teams").run();
+                db.prepare("DROP TABLE IF EXISTS card_diff").run();
+                db.prepare("DROP TABLE IF EXISTS timeAllocation_diff").run();
+                db.prepare("DROP TABLE IF EXISTS discipline_diff").run();
+            }
+
             // add json data format as tables
             db.prepare("CREATE TABLE IF NOT EXISTS deliverable_diff ("+
                 "id	INTEGER NOT NULL UNIQUE,"+
@@ -68,6 +77,20 @@ export default abstract class Migration {
             teamsWithWrongDates.forEach(t => {
                 db.prepare(`UPDATE team_diff SET startDate = ${Date.parse(t.startDate)}, endDate = ${Date.parse(t.endDate)} WHERE id = ${t.id}`).run();
             });
+
+            // Add discipline tracking
+            db.prepare("CREATE TABLE IF NOT EXISTS discipline_diff("+
+                "id INTEGER NOT NULL UNIQUE,"+
+                "numberOfMembers INTEGER,"+
+                "title TEXT,"+
+                "uuid TEXT,"+
+                "addedDate INTEGER,"+
+                "PRIMARY KEY(id AUTOINCREMENT));").run();
+
+            const disciplineIdExists = db.prepare("SELECT * FROM sqlite_master WHERE type = 'table' AND name = 'timeAllocation_diff' AND sql LIKE '%discipline_id%'").get();
+            if(!disciplineIdExists) {
+                db.prepare("ALTER TABLE timeAllocation_diff ADD COLUMN discipline_id INTEGER").run();
+            }
         });
 
         migrate();
