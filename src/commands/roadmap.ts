@@ -1061,12 +1061,14 @@ export abstract class Roadmap {
         const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, true);
         const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
-        // deliverables that are not being worked on, but will be in the next two weeks
-        const newScheduledDeliverables = scheduledFutureDeliverables.filter(sfd => !scheduledDeliverables.some(sd => sd.id === sfd.id));
-
         if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
             return messages;
         }
+
+        // deliverables that are not being worked on, but will be in the next two weeks
+        const newScheduledDeliverables = scheduledFutureDeliverables.filter(sfd => !scheduledDeliverables.some(sd => sd.id === sfd.id));
+        const newTasks = futureTasks.filter(ft => newScheduledDeliverables.some(nsd => nsd.id === ft.deliverable_id));
+        const futureTeamTasks = _._(newTasks).groupBy('team_id').map(v=>v).value();
 
         const teamTasks = _._(currentTasks).groupBy('team_id').map(v=>v).value();
 
@@ -1080,9 +1082,11 @@ export abstract class Roadmap {
 
         messages.push(`# Scheduled Deliverables #  \n`);
 
-        // TODO list deliverables to start with teams
-
         messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+
+        // TODO list deliverables to start with teams
+        messages.push(`### ${newScheduledDeliverables.length} deliverables ${past?'were':'are'} scheduled to begin work by ${futureTeamTasks.length} team(s) within two weeks ###  \n`);
+
         messages.push("---  \n");
 
         const introDesc = 'This report lists the actively assigned deliverables and the associated teams, along with the number of developers assigned to '+
@@ -1114,7 +1118,29 @@ export abstract class Roadmap {
             const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
             const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
 
+            const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
+            if(futureSchedule) {
+                schedule.teams = [...schedule.teams, ...futureTeams];
+            }
+
             schedule.teams.forEach((mt, i) => {
+                messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, futureSchedule, publish));
+            });
+        });
+
+        messages.push(`  \n${publish?'<br/>':''}## The following deliverables are scheduled to begin work within two weeks ##  \n`);
+
+        newScheduledDeliverables.forEach(d => {
+            const title = d.title.includes("Unannounced") ? d.description : d.title;
+            if(publish) {
+                messages.push(`  \n### **<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/deliverables/${d.slug}" target="_blank">${title.trim()}</a>** ${RSINetwork.generateProjectIcons(d)} ###  \n`);
+            } else {
+                messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
+            }
+            
+            const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+
+            futureSchedule.teams.forEach((mt, i) => {
                 messages.push((i ? '  \n' : '') + this.generateWaterfallChart(mt, compareTime, futureSchedule, publish));
             });
         });
@@ -1252,8 +1278,9 @@ export abstract class Roadmap {
 
         const futureTeam = futureSchedule && futureSchedule.teams.find(fs => fs.id === team.id);
         if(futureTeam) {
-            team.schedules = [...team.schedules, ...futureTeam.schedules];
+            team.schedules = [...team.schedules, ...futureTeam.schedules.filter(fts => !team.schedules.some(ts => ts.merged && ts.merged.id === fts.merged.id))];
         }
+        const allFuture = team.schedules.filter(s => s.merged && s.merged.startDate <= compareTime).length === 0; // all scheduled teams are scheduled in the future
         team.schedules.forEach(ds => {
             if(publish) {
                 const time = new Date(compareTime);
@@ -1261,7 +1288,7 @@ export abstract class Roadmap {
                 const thisWeek = GeneralHelpers.getWeek(time, firstOfYear);
                 let newWaterfall = [];
 
-                if(!ds.merged || (ds.merged && ds.merged.startDate <= compareTime)) { // future data should always have merged info (how else would we know it is in the future?)
+                if(!ds.merged || (ds.merged && ds.merged.startDate <= compareTime) || allFuture) { // future data should always have merged info (how else would we know it is in the future?)
                     ds.sprints.forEach((sprint) => {
                         let start  = new Date(sprint.startDate);
                         start = start < firstOfYear ? firstOfYear : start;
@@ -1282,14 +1309,15 @@ export abstract class Roadmap {
                     if(newWaterfall.length) {
                         const weekType = newWaterfall[thisWeek - 1];
                         const day = time.getDay();
-
-                        if(weekType === '==') {
-                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|=':'=|');
-                        } else if((weekType === '~~')){
-                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|~':'~|');
-                        } else {
-                            newWaterfall.splice(thisWeek - 1, 1, day<5?'|.':'.|');
-                        }
+                        // if(weekType === '==') {
+                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|=':'=|');
+                        // } else if((weekType === '~~')){
+                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|~':'~|');
+                        // } else {
+                        //     newWaterfall.splice(thisWeek - 1, 1, day<4?'|.':'.|');
+                        // }
+                        const alteredWeek = (day<4?'|':weekType[0]) + (4<=day?'|':weekType[1]);
+                        newWaterfall.splice(thisWeek - 1, 1, alteredWeek);
 
                         waterfalls.push(newWaterfall.join(''));
                     }
