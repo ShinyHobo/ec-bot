@@ -1142,7 +1142,7 @@ export abstract class Roadmap {
                 messages.push(`  \n### **${title.trim()}** [${d.project_ids.replace(',', ', ')}] ###  \n`);
             }
             if(compareTime-lookForwardOrBack<=d.startDate) {
-                messages.push(`#### (Starting soon!)s ####  \n`);
+                messages.push(`#### (Starting soon!) ####  \n`);
             }
             
             const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
