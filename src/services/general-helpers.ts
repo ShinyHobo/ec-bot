@@ -28,7 +28,7 @@ export default abstract class GeneralHelpers {
     /**
      * Converts time in milliseconds to a date string in YYYY-MM-DD format
      * @param time The time in milliseconds to convert
-     * @param hyphenate Whether to include hyphens
+     * @param hyphenate Whether to include hyphens, defaults true
      * @returns The date string in YYYY-MM-DD format
      */
     public static convertTimeToHyphenatedDate(time: number, hyphenate: boolean = true): string {

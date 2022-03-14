@@ -1081,6 +1081,7 @@ export abstract class Roadmap {
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
+        messages.push(`#### as of ${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)} ####  \n`);
 
         messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
 
