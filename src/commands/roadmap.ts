@@ -615,7 +615,7 @@ export abstract class Roadmap {
                             } else if(newDate < oldDate) {
                                 updateText = "moved closer";
                             } else if(oldDate < newDate) {
-                                updateText = "pushed back";
+                                updateText = "been pushed back";
                             }
 
                             update.push(`\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
