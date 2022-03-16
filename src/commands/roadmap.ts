@@ -952,7 +952,7 @@ export abstract class Roadmap {
     private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
         const messages = [];
         if(deliverable.card) {
-            if(oldDeliverable.card) {
+            if(oldDeliverable && oldDeliverable.card) {
                 const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
                 if(d.length) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
@@ -1046,19 +1046,23 @@ export abstract class Roadmap {
      * @returns The report lines array
      */
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
+
+        // TODO - round compare time to beginning/end? of day; need to match time set for start/end dates
+
+        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+
         let messages = [];
         const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
 
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
-        const lookForwardOrBack = 86400000 * 14; // two weeks
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
-        const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
+        const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime, lookForwardOrBack);
         const scheduledDeliverables = deliverables.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForwardOrBack); // tasks that begin within the next two weeks
-        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, true);
+        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, lookForwardOrBack, true);
         const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
@@ -1105,7 +1109,7 @@ export abstract class Roadmap {
 
         messages.push("---  \n");
 
-        messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
+        messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, lookForwardOrBack, publish)];
         //#endregion
 
         // TODO - consolidate the following code:
@@ -1168,10 +1172,11 @@ export abstract class Roadmap {
      * Generates extra analysis for the Scheduled Deliverables Report
      * @param scheduledDeliverables The deliverables that are currently being worked on
      * @param compareTime The time the report was run
+     * @param lookForward The time period to look across
      * @param publish Whether or not to add additional markdown for website publishing
      * @returns The tldr lines
      */
-    private static generateScheduledTldr(scheduledDeliverables: any[any], compareTime: number, publish: boolean = false): any[string] {
+    private static generateScheduledTldr(scheduledDeliverables: any[any], compareTime: number, lookForward: number, publish: boolean = false): any[string] {
         const tldr = [];
         if(publish) {
             tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
@@ -1192,7 +1197,7 @@ export abstract class Roadmap {
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0, id: t.id, title: t.title};
+                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0, id: t.id, title: t.title, slug: t.slug};
                                 teamTimeBreakdowns[t.id].full += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                                 teamTimeBreakdowns[t.id].part += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
                                 teamTimeBreakdowns[t.id].sc += sd.project_ids.includes('SC');
@@ -1204,7 +1209,7 @@ export abstract class Roadmap {
             }
         });
 
-        const endingSoon = scheduledDeliverables.filter(sd => sd.endDate <= compareTime + (86400000 * 14));
+        const endingSoon = scheduledDeliverables.filter(sd => sd.endDate <= compareTime + lookForward);
         if(endingSoon.length) {
             tldr.push(`${endingSoon.length} deliverable(s) are not currently scheduled to continue work after this sprint:  \n`);
             if(publish) {
@@ -1235,7 +1240,8 @@ export abstract class Roadmap {
             const projectTasks = tb.sc + tb.sq42;
             const projectPercent = Math.round(tb.sq42 / projectTasks * 100);
             const projectText = projectPercent ? (projectPercent === 100 ? 'all of which are for SQ42' : `${projectPercent}% of which are for SQ42`) : 'all of which are for SC';
-            tldr.push(`${publish?'<li>':'* '}${tb.title}${publish?'<br/>':' | '}${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
+            const title = publish?`<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/teams/${tb.slug}" target="_blank">${tb.title}</a>`:tb.title;
+            tldr.push(`${publish?'<li>':'* '}${title}${publish?'<br/>':' | '}${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
         });
         if(publish) {
             tldr.push('</ul>');
@@ -1256,13 +1262,13 @@ export abstract class Roadmap {
      * @param deliverables The deliverables to match tasks with
      * @param tasks The tasks (time allocations) to generate schedule assemblies for
      * @param compareTime The comparison time
+     * @param lookForward The time period to look across
      * @param futureSchedule Whether to generate the schedule assemblies for the immediate future (next scheduled)
      * @returns
      */
-    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime: number, futureSchedule: boolean = false): any[any] {
+    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime: number, lookForward: number, futureSchedule: boolean = false): any[any] {
         const groupedTasks = _.groupBy(tasks, 'deliverable_id');
         const mergedDisciplineSchedules = [];
-        const lookForward = 86400000 * 14;
         const scheduledDeliverables = deliverables.filter(d => groupedTasks[d.id]);
         scheduledDeliverables.forEach(d => {
             const teams = _.orderBy(d.teams.filter(mt => groupedTasks[d.id].some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
