@@ -1365,7 +1365,7 @@ export abstract class Roadmap {
                         const day = time.getDay();
                         const alteredWeek = (day<5?'|':weekType[0]) + (5<=day?'|':weekType[1]);
                         newWaterfall.splice(thisWeek - 1, 1, alteredWeek);
-                        waterfalls.push(newWaterfall.join(''));
+                        waterfalls.push(newWaterfall.slice(0,52).join(''));
                     }
                 }
             }
