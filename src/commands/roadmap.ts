@@ -167,9 +167,7 @@ export abstract class Roadmap {
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
-                        const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
-                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                            `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
+                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
                             ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
                     } else {
                         msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
@@ -253,6 +251,8 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
+        // TODO - group time allocations by deliverable_id to speed up process
+
         const mostRecentDisciplineIds = dbTimeAllocations.filter(dd => dd.discipline_id).map((dd) => dd.discipline_id).toString();
         let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate), uuid AS disciplineUuid FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid ORDER BY id`).all();
 
@@ -338,18 +338,26 @@ export abstract class Roadmap {
             }
 
             if(dbTimeAllocations.length) {
-                const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
-                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
-                const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
-                removedTimes.forEach((rt) => {
-                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
-                });
+                const groupedTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
+                
+                dList.forEach(d => {
+                    if(d.teams) {
+                        const oldDeliverable = dbDeliverables.find(od => od.uuid === d.uuid || (d.title && od.title === d.title && !d.title.includes("Unannounced")));
+                        if(oldDeliverable && groupedTimeAllocations[oldDeliverable.id]) { // won't be any removed time allocations if there were none to begin with
+                            const dbRemovedTimeAllocations = groupedTimeAllocations[oldDeliverable.id].filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
+                            const removedTimes = groupedTimeAllocations[oldDeliverable.id].filter(f => f.teams && !f.teams.some(t => t.timeAllocations && t.timeAllocations.some(l => l.uuid === f.uuid)) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
+                            removedTimes.forEach((rt) => {
+                                timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
+                            });
 
-                // disciplines are directly tied to time allocations by their uuid, one to many relationship
-                const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
-                const removedDisciplines = dbDisciplines.filter(f => !dTimes.some(l => l.disciplineUuid === f.uuid) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
-                removedDisciplines.forEach((rd) => {
-                    disciplinesInsert.run([null, rd.title, rd.uuid, now]);
+                            // disciplines are directly tied to time allocations by their uuid, one to many relationship
+                            const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
+                            const removedDisciplines = dbDisciplines.filter(f => f.teams && !f.teams.some(t => t.timeAllocations && t.timeAllocations.some(l => l.disciplineUuid === f.uuid)) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
+                            removedDisciplines.forEach((rd) => {
+                                disciplinesInsert.run([null, rd.title, rd.uuid, now]);
+                            });
+                        }
+                    }
                 });
             }
 
@@ -434,24 +442,27 @@ export abstract class Roadmap {
                 }
             });
 
-            // Update deliverable team relationships when deliverable and team update separately of each other
+            // Update deliverable team relationships when deliverable and team update separately from each other
             const addedTeamIds = addedTeams.map(z => z.matchId).join(',');
             const addedDeliverableIds = addedDeliverables.map(z => z.matchId).join(',');
             const oldDeliverableTeams = db.prepare(`SELECT * FROM deliverable_teams WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds})`).all();
             oldDeliverableTeams.forEach(dt => {
                 const matchedTeam = addedTeams.find(at => at.matchId === dt.team_id);
                 const matchedDeliverable = addedDeliverables.find(d => d.matchId === dt.deliverable_id);
-                if(matchedTeam || matchedDeliverable) {
+                const teamExists = dList.find(dl => dl.teams && dl.teams.some(dt => dt.uuid === dt.uuid));
+                if((matchedTeam || matchedDeliverable) && teamExists) {
                     deliverableTeamsInsert.run([matchedDeliverable ? matchedDeliverable.newId : dt.deliverable_id, matchedTeam ? matchedTeam.newId : dt.team_id]);
                 }
             });
 
             // Update time allocations when team or deliverable update, but time allocations don't
-            const oldTimeAllocations = db.prepare(`SELECT * FROM timeAllocation_diff WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds}) AND partialTime IS NOT NULL`).all();
+            const oldTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds}) AND partialTime IS NOT NULL GROUP BY uuid`).all();
             oldTimeAllocations.forEach(ta => {
                 const matchedTeam = addedTeams.find(at => at.matchId === at.team_id);
                 const matchedDeliverable = addedDeliverables.find(d => d.matchId === ta.deliverable_id);
-                if(matchedTeam || matchedDeliverable) {
+                // Don't add a time allocation for a new version of either team or deliverable if the time allocation was removed
+                const timeAllocationExists = dList.find(dl => dl.teams && dl.teams.some(dt => dt.timeAllocations && dt.timeAllocations.some(dta => dta.uuid === ta.uuid)));
+                if((matchedTeam || matchedDeliverable) && timeAllocationExists) {
                     timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime, matchedTeam ? matchedTeam.newId : ta.team_id, matchedDeliverable ? matchedDeliverable.newId : ta.deliverable_id, ta.discipline_id]);
                 }
             });
