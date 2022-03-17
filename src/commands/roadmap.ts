@@ -167,9 +167,7 @@ export abstract class Roadmap {
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
-                        const readdedText = changes.readded ? ` with \`${changes.readded} returning\`` : "";
-                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms with`+
-                            `  \n\`${changes.updated} modifications\`, \`${changes.removed} removals\`, and \`${changes.added} additions\`${readdedText}.  \n`+
+                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
                             ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
                     } else {
                         msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
@@ -253,6 +251,8 @@ export abstract class Roadmap {
         const dbDeliverableTeams = db.prepare(`SELECT * FROM team_diff WHERE id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${mostRecentDeliverableIds}))`).all();
         const dbCards = db.prepare("SELECT *, MAX(addedDate) FROM card_diff GROUP BY tid").all();
         let dbTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE deliverable_id IN (${mostRecentDeliverableIds}) GROUP BY uuid`).all();
+        // TODO - group time allocations by deliverable_id to speed up process
+
         const mostRecentDisciplineIds = dbTimeAllocations.filter(dd => dd.discipline_id).map((dd) => dd.discipline_id).toString();
         let dbDisciplines = db.prepare(`SELECT *, MAX(addedDate), uuid AS disciplineUuid FROM discipline_diff WHERE id IN (${mostRecentDisciplineIds}) GROUP BY uuid ORDER BY id`).all();
 
@@ -338,18 +338,26 @@ export abstract class Roadmap {
             }
 
             if(dbTimeAllocations.length) {
-                const dTimes = dList.filter((d) => d.teams).flatMap((d) => d.teams).flatMap((t) => t.timeAllocations);
-                const dbRemovedTimeAllocations = dbTimeAllocations.filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
-                const removedTimes = dbTimeAllocations.filter(f => !dTimes.some(l => l.uuid === f.uuid) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
-                removedTimes.forEach((rt) => {
-                    timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
-                });
+                const groupedTimeAllocations = _.groupBy(dbTimeAllocations, 'deliverable_id');
+                
+                dList.forEach(d => {
+                    if(d.teams) {
+                        const oldDeliverable = dbDeliverables.find(od => od.uuid === d.uuid || (d.title && od.title === d.title && !d.title.includes("Unannounced")));
+                        if(oldDeliverable && groupedTimeAllocations[oldDeliverable.id]) { // won't be any removed time allocations if there were none to begin with
+                            const dbRemovedTimeAllocations = groupedTimeAllocations[oldDeliverable.id].filter(ta => ta.startDate === null && ta.endDate === null && ta.partialTime === null);
+                            const removedTimes = groupedTimeAllocations[oldDeliverable.id].filter(f => f.teams && !f.teams.some(t => t.timeAllocations && t.timeAllocations.some(l => l.uuid === f.uuid)) && !dbRemovedTimeAllocations.some(l => l.uuid === f.uuid));
+                            removedTimes.forEach((rt) => {
+                                timeAllocationInsert.run([null, null, now, rt.uuid, null, rt.team_id, rt.deliverable_id, rt.discipline_id]);
+                            });
 
-                // disciplines are directly tied to time allocations by their uuid, one to many relationship
-                const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
-                const removedDisciplines = dbDisciplines.filter(f => !dTimes.some(l => l.disciplineUuid === f.uuid) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
-                removedDisciplines.forEach((rd) => {
-                    disciplinesInsert.run([null, rd.title, rd.uuid, now]);
+                            // disciplines are directly tied to time allocations by their uuid, one to many relationship
+                            const dbRemovedDisciplines = dbDisciplines.filter(di => di.numberOfMembers === null);
+                            const removedDisciplines = dbDisciplines.filter(f => f.teams && !f.teams.some(t => t.timeAllocations && t.timeAllocations.some(l => l.disciplineUuid === f.uuid)) && !dbRemovedDisciplines.some(l => l.uuid === f.uuid));
+                            removedDisciplines.forEach((rd) => {
+                                disciplinesInsert.run([null, rd.title, rd.uuid, now]);
+                            });
+                        }
+                    }
                 });
             }
 
@@ -434,24 +442,27 @@ export abstract class Roadmap {
                 }
             });
 
-            // Update deliverable team relationships when deliverable and team update separately of each other
+            // Update deliverable team relationships when deliverable and team update separately from each other
             const addedTeamIds = addedTeams.map(z => z.matchId).join(',');
             const addedDeliverableIds = addedDeliverables.map(z => z.matchId).join(',');
             const oldDeliverableTeams = db.prepare(`SELECT * FROM deliverable_teams WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds})`).all();
             oldDeliverableTeams.forEach(dt => {
                 const matchedTeam = addedTeams.find(at => at.matchId === dt.team_id);
                 const matchedDeliverable = addedDeliverables.find(d => d.matchId === dt.deliverable_id);
-                if(matchedTeam || matchedDeliverable) {
+                const teamExists = dList.find(dl => dl.teams && dl.teams.some(dt => dt.uuid === dt.uuid));
+                if((matchedTeam || matchedDeliverable) && teamExists) {
                     deliverableTeamsInsert.run([matchedDeliverable ? matchedDeliverable.newId : dt.deliverable_id, matchedTeam ? matchedTeam.newId : dt.team_id]);
                 }
             });
 
             // Update time allocations when team or deliverable update, but time allocations don't
-            const oldTimeAllocations = db.prepare(`SELECT * FROM timeAllocation_diff WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds}) AND partialTime IS NOT NULL`).all();
+            const oldTimeAllocations = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE team_id IN (${addedTeamIds}) OR deliverable_id IN (${addedDeliverableIds}) AND partialTime IS NOT NULL GROUP BY uuid`).all();
             oldTimeAllocations.forEach(ta => {
                 const matchedTeam = addedTeams.find(at => at.matchId === at.team_id);
                 const matchedDeliverable = addedDeliverables.find(d => d.matchId === ta.deliverable_id);
-                if(matchedTeam || matchedDeliverable) {
+                // Don't add a time allocation for a new version of either team or deliverable if the time allocation was removed
+                const timeAllocationExists = dList.find(dl => dl.teams && dl.teams.some(dt => dt.timeAllocations && dt.timeAllocations.some(dta => dta.uuid === ta.uuid)));
+                if((matchedTeam || matchedDeliverable) && timeAllocationExists) {
                     timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime, matchedTeam ? matchedTeam.newId : ta.team_id, matchedDeliverable ? matchedDeliverable.newId : ta.deliverable_id, ta.discipline_id]);
                 }
             });
@@ -615,7 +626,7 @@ export abstract class Roadmap {
                             } else if(newDate < oldDate) {
                                 updateText = "moved closer";
                             } else if(oldDate < newDate) {
-                                updateText = "pushed back";
+                                updateText = "been pushed back";
                             }
 
                             update.push(`\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
@@ -952,7 +963,7 @@ export abstract class Roadmap {
     private static generateCardImage(deliverable: any, oldDeliverable: any, publish: boolean = false): string[] {
         const messages = [];
         if(deliverable.card) {
-            if(oldDeliverable.card) {
+            if(oldDeliverable && oldDeliverable.card) {
                 const d = diff.getDiff(deliverable.card, oldDeliverable.card).filter((df) => df.op === 'update');
                 if(d.length) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
@@ -1046,19 +1057,23 @@ export abstract class Roadmap {
      * @returns The report lines array
      */
     private static generateScheduledDeliverablesReport(compareTime: number, deliverables: any[], db: Database, publish: boolean = false): string[] {
+
+        // TODO - round compare time to beginning/end? of day; need to match time set for start/end dates
+
+        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+
         let messages = [];
         const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
 
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
-        const lookForwardOrBack = 86400000 * 14; // two weeks
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
-        const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime);
+        const currentDisciplineSchedules = this.getDisciplineSchedules(deliverables, currentTasks, compareTime, lookForwardOrBack);
         const scheduledDeliverables = deliverables.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= compareTime + lookForwardOrBack); // tasks that begin within the next two weeks
-        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, true);
+        const futureDisciplineSchedules = this.getDisciplineSchedules(deliverables, futureTasks, compareTime, lookForwardOrBack, true);
         const scheduledFutureDeliverables = deliverables.filter(d => futureDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
 
         if(!scheduledDeliverables.length && !scheduledFutureDeliverables.length) {
@@ -1081,6 +1096,7 @@ export abstract class Roadmap {
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
+        messages.push(`#### as of ${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)} ####  \n`);
 
         messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
 
@@ -1104,7 +1120,7 @@ export abstract class Roadmap {
 
         messages.push("---  \n");
 
-        messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, publish)];
+        messages = [...messages, ...this.generateScheduledTldr(scheduledDeliverables, compareTime, lookForwardOrBack, publish)];
         //#endregion
 
         // TODO - consolidate the following code:
@@ -1167,10 +1183,11 @@ export abstract class Roadmap {
      * Generates extra analysis for the Scheduled Deliverables Report
      * @param scheduledDeliverables The deliverables that are currently being worked on
      * @param compareTime The time the report was run
+     * @param lookForward The time period to look across
      * @param publish Whether or not to add additional markdown for website publishing
      * @returns The tldr lines
      */
-    private static generateScheduledTldr(scheduledDeliverables: any[any], compareTime: number, publish: boolean = false): any[string] {
+    private static generateScheduledTldr(scheduledDeliverables: any[any], compareTime: number, lookForward: number, publish: boolean = false): any[string] {
         const tldr = [];
         if(publish) {
             tldr.push('<details><summary><h3>extra analysis (click me)</h3></summary><br/>  \n');
@@ -1191,7 +1208,7 @@ export abstract class Roadmap {
                             sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                             const scheduledTimeAllocations = GeneralHelpers.mergeDateRanges(sprints).filter(ta => ta.startDate <= compareTime && compareTime <= ta.endDate);
                             if(scheduledTimeAllocations.length) {
-                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0, id: t.id, title: t.title};
+                                teamTimeBreakdowns[t.id] = teamTimeBreakdowns[t.id] ?? {full: 0, part: 0, sc: 0, sq42: 0, id: t.id, title: t.title, slug: t.slug};
                                 teamTimeBreakdowns[t.id].full += _.sumBy(scheduledTimeAllocations, ta => ta.fullTime);
                                 teamTimeBreakdowns[t.id].part += _.sumBy(scheduledTimeAllocations, ta => ta.partTime);
                                 teamTimeBreakdowns[t.id].sc += sd.project_ids.includes('SC');
@@ -1203,7 +1220,7 @@ export abstract class Roadmap {
             }
         });
 
-        const endingSoon = scheduledDeliverables.filter(sd => sd.endDate <= compareTime + (86400000 * 14));
+        const endingSoon = scheduledDeliverables.filter(sd => sd.endDate <= compareTime + lookForward);
         if(endingSoon.length) {
             tldr.push(`${endingSoon.length} deliverable(s) are not currently scheduled to continue work after this sprint:  \n`);
             if(publish) {
@@ -1234,7 +1251,8 @@ export abstract class Roadmap {
             const projectTasks = tb.sc + tb.sq42;
             const projectPercent = Math.round(tb.sq42 / projectTasks * 100);
             const projectText = projectPercent ? (projectPercent === 100 ? 'all of which are for SQ42' : `${projectPercent}% of which are for SQ42`) : 'all of which are for SC';
-            tldr.push(`${publish?'<li>':'* '}${tb.title}${publish?'<br/>':' | '}${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
+            const title = publish?`<a href="https://${RSINetwork.rsi}/roadmap/progress-tracker/teams/${tb.slug}" target="_blank">${tb.title}</a>`:tb.title;
+            tldr.push(`${publish?'<li>':'* '}${title}${publish?'<br/>':' | '}${taskText} with ${tasks} task(s) scheduled, ${projectText}${publish?'</li>':''}  \n`);
         });
         if(publish) {
             tldr.push('</ul>');
@@ -1255,13 +1273,13 @@ export abstract class Roadmap {
      * @param deliverables The deliverables to match tasks with
      * @param tasks The tasks (time allocations) to generate schedule assemblies for
      * @param compareTime The comparison time
+     * @param lookForward The time period to look across
      * @param futureSchedule Whether to generate the schedule assemblies for the immediate future (next scheduled)
      * @returns
      */
-    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime: number, futureSchedule: boolean = false): any[any] {
+    private static getDisciplineSchedules(deliverables: any[any], tasks: any[any], compareTime: number, lookForward: number, futureSchedule: boolean = false): any[any] {
         const groupedTasks = _.groupBy(tasks, 'deliverable_id');
         const mergedDisciplineSchedules = [];
-        const lookForward = 86400000 * 14;
         const scheduledDeliverables = deliverables.filter(d => groupedTasks[d.id]);
         scheduledDeliverables.forEach(d => {
             const teams = _.orderBy(d.teams.filter(mt => groupedTasks[d.id].some(s => s.team_id === mt.id)), [d => d.title.toLowerCase()], ['asc']);
