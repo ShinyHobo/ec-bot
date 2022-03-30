@@ -1382,7 +1382,7 @@ export abstract class Roadmap {
 
                     // check for continuing work here
                     if(continuingWork) {
-                        timelines.push(`↳ will continue ${GeneralHelpers.convertTimeToHyphenatedDate(continuingWork.startDate)} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
+                        timelines.push(`↳ will continue ${GeneralHelpers.convertTimeToHyphenatedDate(continuingWork.merged.startDate)} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
                     }
                 } else if(!continuingWork) { // list future work
                     timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} will work on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
