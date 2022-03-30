@@ -784,7 +784,8 @@ export abstract class Roadmap {
         const tldr = [];
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${GeneralHelpers.convertTimeToHyphenatedDate(start)} => ${GeneralHelpers.convertTimeToHyphenatedDate(end)} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
-        tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+        tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update. ` +
+            `Please note that not all removals are intentional; there is currently a bug with how time is entered on the Progress Tracker that can cause deliverables to disappear.  \n`));
 
         tldr.push('---  \n\n');
 
