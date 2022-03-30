@@ -1334,7 +1334,8 @@ export abstract class Roadmap {
             team.schedules = [...team.schedules, ...futureTeam.schedules.filter(fts => !team.schedules.some(ts => ts.merged && ts.merged.id === fts.merged.id))];
         }
         const allFuture = team.schedules.filter(s => s.merged && s.merged.startDate <= compareTime).length === 0; // all scheduled teams are scheduled in the future
-        team.schedules.forEach(ds => {
+        const filteredSchedules = _._(team.schedules).groupBy(s => s.merged && s.merged.title).map(s => s[0]).value();
+        filteredSchedules.forEach(ds => {
             if(publish) {
                 const time = new Date(compareTime);
                 const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
