@@ -627,7 +627,7 @@ export abstract class Roadmap {
                                 updateText = "been pushed back";
                             }
 
-                            update.push(`\* Start date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.endDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.endDate)}  \n`);
+                            update.push(`\* Start date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.startDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.startDate)}  \n`);
                         }
                         if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
