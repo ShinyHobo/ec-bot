@@ -616,12 +616,10 @@ export abstract class Roadmap {
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
-                            const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.startDate);
-                            const newDateText = newDate.toDateString();
 
                             let updateText = "";
-                            if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
+                            if(f.startDate < compareTime && l.startDate < compareTime) {
                                 updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
                             } else if(newDate < oldDate) {
                                 updateText = "moved closer";
@@ -629,16 +627,14 @@ export abstract class Roadmap {
                                 updateText = "been pushed back";
                             }
 
-                            update.push(`\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
+                            update.push(`\* Start date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.endDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.endDate)}  \n`);
                         }
                         if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
-                            const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.endDate);
-                            const newDateText = newDate.toDateString();
 
                             let updateText = "";
-                            if((compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) || (compareTime > Date.parse(oldDateText) && newDate < oldDate)) {
+                            if((compareTime < f.endDate && l.endDate < compareTime) || (compareTime > f.endDate && newDate < oldDate)) {
                                 updateText = "moved earlier (time allocation removal(s) or priority up likely)  \n"; // likely team time allocation was removed, but could have finished early
                             } else if(oldDate < newDate) {
                                 updateText = "been extended";
@@ -646,7 +642,7 @@ export abstract class Roadmap {
                                 updateText = "moved closer";
                             }
 
-                            update.push(`\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
+                            update.push(`\* End date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.endDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.endDate)}  \n`);
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
