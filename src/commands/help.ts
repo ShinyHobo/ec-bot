@@ -1,5 +1,4 @@
-import { Message } from 'discord.js';
-import Database from 'better-sqlite3';
+import MessagingChannel from '../channels/messaging-channel';
 
 /**
  * Bot command for generating list of available commands and presenting them to users
@@ -16,11 +15,9 @@ export abstract class Help {
 
     /**
      * Executes the bot commands
-     * @param msg The msg that triggered the command
-     * @param args Available arguments included with the command
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    public static execute(msg: Message, args: Array<string>, db: Database) {
+    public static execute(channel: MessagingChannel) {
         let messages: Array<string> = [];
         import('../commands/index').then(botCommands => {
             Object.keys(botCommands).forEach(key => {
@@ -29,7 +26,7 @@ export abstract class Help {
                     messages.push(`* ${command.description}:\n${command.usage.replace('Usage: ','')}`);
                 }
             });
-            msg.channel.send(messages.join('\n'));
+            channel.send(messages.join('\n'));
         });
     }
 };

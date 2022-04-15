@@ -1,5 +1,6 @@
-import { Message, Client, ThreadChannel } from 'discord.js';
+import { Client, Message, ThreadChannel } from 'discord.js';
 import Database from 'better-sqlite3';
+import MessagingChannel from '../channels/messaging-channel';
 
 /** Bot commands for renewing Discord threads automatically */
 export abstract class Renew {
@@ -14,45 +15,43 @@ export abstract class Renew {
 
     /**
      * Executes the bot commands
-     * @param msg The msg that triggered the command
-     * @param args Available arguments included with the command
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    public static execute(msg: Message, args: Array<string>, db: Database) {
-        if(!msg.guild) {
-            msg.channel.send('Command must be run from within server!').catch(console.error);
+    public static execute(channel: MessagingChannel) {
+        if(!channel.getGuild()) {
+            channel.send('Command must be run from within discord server!');
             return;
         }
 
-        if(args.length !== 1) {
-            msg.reply(this.usage).catch(console.error);
+        if(channel.args.length !== 1) {
+            channel.reply(this.usage);
             return;
         }
 
-        if(msg.channel.isThread()) {
-            const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
-            if(officer && msg.member.roles.highest.comparePositionTo(officer) < 0) {
-                msg.reply("You have insufficient privileges. An officer or above is required.").catch(console.error);
+        if(channel.isThread()) {
+            if (!channel.isAuthorized()) {
                 return;
             }
-            
-            switch(args[0]) {
+
+            const db = channel.db;
+            const channelId = channel.getChannelId();
+            switch(channel.args[0]) {
                 case 'on':
                     // add to db
-                    db.prepare('INSERT OR IGNORE INTO threads VALUES (?)').run([msg.channelId]);
-                    msg.channel.send(`Thread renewal on.`).catch(console.error);
+                    db.prepare('INSERT OR IGNORE INTO threads VALUES (?)').run([channelId]);
+                    channel.send(`Thread renewal on.`);
                     break;
                 case 'off':
                     // remove from db
-                    db.prepare('DELETE FROM threads WHERE id = ?').run([msg.channelId]);
-                    msg.channel.send(`Thread renewal off.`).catch(console.error);
+                    db.prepare('DELETE FROM threads WHERE id = ?').run([channelId]);
+                    channel.send(`Thread renewal off.`);
                     break;
                 default:
-                    msg.channel.send(this.usage).catch(console.error);
+                    channel.send(this.usage);
                     break;
             }
         } else {
-            msg.channel.send('`!renew [on/off]` must must be used within a thread.').catch(console.error);
+            channel.send('`!renew [on/off]` must must be used within a thread.');
         }
     }
 
