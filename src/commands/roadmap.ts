@@ -22,8 +22,8 @@ export abstract class Roadmap {
     /**
      * The bot command pattern
      * --publish can be added to compare and teams to generate extras for website publishing */
-    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
-        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams <- Generates a report of currently assigned deliverables`';
+    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] [--publish] '+
+        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams [--publish] <- Generates a report of currently assigned deliverables`';
     //#endregion
 
     //#region Private properies

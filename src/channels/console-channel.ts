@@ -87,7 +87,6 @@ export default class ConsoleChannel extends MessagingChannel {
      * @returns always true
      */
     isAuthorized(): boolean {
-        // console.info("isAuthorized not implemented for CLI!");
         return true;
     }
 
@@ -96,7 +95,6 @@ export default class ConsoleChannel extends MessagingChannel {
      * @returns always false
      */
     isThread(): boolean {
-        // console.info("isThread not implemented for CLI!");
         return false;
     }
 
@@ -105,7 +103,6 @@ export default class ConsoleChannel extends MessagingChannel {
      * @returns always undefined
      */
     getGuild(): any {
-        // console.info("getGuild not implemented for CLI!");
         return undefined;
     }
     
@@ -114,7 +111,6 @@ export default class ConsoleChannel extends MessagingChannel {
      * @returns always "0"
      */
     getMemberId(): string {
-        // console.info("getMemberId not implemented for CLI!");
         return "0";
     }
     
@@ -123,7 +119,6 @@ export default class ConsoleChannel extends MessagingChannel {
      * @returns always "0"
      */
     getChannelId() : string {
-        // console.info("getChannelId not implemented for CLI!");
         return "0";
     }
     
@@ -131,7 +126,5 @@ export default class ConsoleChannel extends MessagingChannel {
      * Used to set the role for a discord user, but does nothing on the console.
      * @param roleName The name of the role.
      */
-    giveRole(roleName: any): void {
-        // console.info("giveRole not implemented for CLI!");
-    }
+    giveRole(roleName: any): void {}
 }

@@ -8,7 +8,7 @@ export abstract class Renew {
     public static command = '!renew';
 
     /** The functionality of the command */
-    public static description = 'Manages server thread autorenewals. Must be used in a thread.';
+    public static description = 'Manages server thread autorenewals. Must be used in a thread (not available for CLI)';
 
     /** The bot command pattern */
     public static usage = 'Usage: `!renew [on/off]`';
