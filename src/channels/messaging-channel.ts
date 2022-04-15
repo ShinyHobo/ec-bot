@@ -18,6 +18,40 @@ export default abstract class MessagingChannel {
     abstract run(): void;
 
     /**
+     * Returns all available commands.
+     * @returns A map containing the command name as key and the command object as value.
+     */
+     abstract getCommands(): Map<string, Object>;
+
+    //#region ExecuteCommand method
+    /**
+     * Finds and executes the command provided in the argument list.
+     * @param args The command (first index) and additional arguments to execute the command with.
+     * @param prefix Characters that proceed the commands, e.g. the letter ! in !help
+     */
+    executeCommandIfExists(args: string[], prefix: string = ""): void {
+        this.args = args;
+
+        let commands = this.getCommands();
+        let commandString = prefix + this.args.shift().toLowerCase();
+        if (!commands.has(commandString)) {
+            console.error("Unknown command!");
+            commandString = "!help";
+        }
+
+        try {
+            let command: any = commands.get(commandString);
+            command.execute(this);
+        } catch (error) {
+            console.error(error);
+            this.send('There was an error trying to execute that command!')
+        }
+    }
+    //#endregion
+
+    //#region Output methods
+
+    /**
      * Outputs text to the standard output channel.
      * @param text The text to output.
      */
@@ -50,13 +84,9 @@ export default abstract class MessagingChannel {
      * @param text The text to output.
      */
     abstract reply(text: string): any;
+    //#endregion
 
-    /**
-     * Returns all available commands.
-     * @returns A map containing the command name as key and the command object as value.
-     */
-    abstract getCommands(): Map<string, Object>;
-
+    //#region Discord specific methods
 
     /**
      * @returns true if user is authorized.
@@ -88,30 +118,5 @@ export default abstract class MessagingChannel {
      * @param roleName The name of the role to add to the existing user roles.
      */
     abstract giveRole(roleName: any) : void;
-
-
-    /**
-     * Finds and executes the command provided in the argument list.
-     * @param args The command (first index) and additional arguments to execute the command with.
-     * @param prefix Characters that proceed the commands, e.g. the letter ! in !help
-     */
-    executeCommandIfExists(args: string[], prefix: string = ""): void {
-        this.args = args;
-
-        let commands = this.getCommands();
-        let commandString = prefix + this.args.shift().toLowerCase();
-        if (!commands.has(commandString)) {
-            console.error("Unknown command!");
-            commandString = "!help";
-        }
-
-        try {
-            let command: any = commands.get(commandString);
-            command.execute(this);
-        } catch (error) {
-            console.error(error);
-            this.send('There was an error trying to execute that command!')
-        }
-    }
-
+    //#endregion
 }

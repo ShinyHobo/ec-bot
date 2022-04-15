@@ -27,6 +27,20 @@ export default class ConsoleChannel extends MessagingChannel {
     }
 
     /**
+     * Returns all available commands on the console.
+     * @returns A map containing the command name as key and the command object as value.
+     */
+     getCommands(): Map<string, Object> {
+        let commands = new Map<string, Object>();
+        Object.keys(botCommands).map(key => {
+            commands.set(botCommands[key][key].command, botCommands[key][key]);
+        });
+        return commands;
+    }
+
+    //#region Output methods
+
+    /**
      * Writes text to the console.
      * @param text The text to write to console.
      */
@@ -69,18 +83,9 @@ export default class ConsoleChannel extends MessagingChannel {
     reply(text: string): void {
         this.send(text);
     }
+    //#endregion
 
-    /**
-     * Returns all available commands on the console.
-     * @returns A map containing the command name as key and the command object as value.
-     */
-    getCommands(): Map<string, Object> {
-        let commands = new Map<string, Object>();
-        Object.keys(botCommands).map(key => {
-            commands.set(botCommands[key][key].command, botCommands[key][key]);
-        });
-        return commands;
-    }
+    //#region Discord bot specific methods (unimplemented)
     
     /**
      * Checks if the user is authorized or not. User is always authorized on the console.
@@ -127,4 +132,5 @@ export default class ConsoleChannel extends MessagingChannel {
      * @param roleName The name of the role.
      */
     giveRole(roleName: any): void {}
+    //#endregion
 }

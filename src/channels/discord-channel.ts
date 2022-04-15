@@ -18,13 +18,27 @@ export default class DiscordChannel extends MessagingChannel {
     /**
      * Sets up the discord bot to be able to receive message and send responses.
      */
-    run() {
+     run() {
         this.bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES], partials: ["CHANNEL"] });
         this.bot.login(process.env.TOKEN);
         this.bot.on('ready', this.onBotReady);
         this.bot.on('messageCreate', this.onBotMessage); // Watch the message history for commands
         this.bot.on('threadUpdate', this.onBotThreadUpdate);
     }
+
+    /**
+     * Returns all available commands for the discord bot.
+     * @returns A map containing the command name as key and the command object as value.
+     */
+     getCommands(): Map<string, Object> {
+        let commands = new Collection<string, Object>();
+        Object.keys(botCommands).map(key => {
+            commands.set(botCommands[key][key].command, botCommands[key][key]);
+        });
+        return commands;
+    }
+
+    //#region Discord bot callback methods
 
     /**
      * The callback function for when the discord bot has been started.
@@ -59,16 +73,18 @@ export default class DiscordChannel extends MessagingChannel {
         botCommands.Renew.Renew.unarchive(newThread, this.db);
     }
 
-
     /**
      * Creates a shallow copy of this DiscordChannel object.
      * @returns A new DiscordChannel object.
      */
-    getClone(): DiscordChannel {
+     getClone(): DiscordChannel {
         let discordChannel = new DiscordChannel(this.db);
         discordChannel.bot = this.bot;
         return discordChannel;
     }
+    //#endregion
+
+    //#region Output methods
 
     /**
      * Sends a text message as a reponse to the channel of the incoming message.
@@ -111,18 +127,9 @@ export default class DiscordChannel extends MessagingChannel {
     reply(text: string): any {
         return this.msg.reply(text).catch(console.error);
     }
+    //#endregion
 
-    /**
-     * Returns all available commands for the discord bot.
-     * @returns A map containing the command name as key and the command object as value.
-     */
-    getCommands(): Map<string, Object> {
-        let commands = new Collection<string, Object>();
-        Object.keys(botCommands).map(key => {
-            commands.set(botCommands[key][key].command, botCommands[key][key]);
-        });
-        return commands;
-    }
+    //#region Discord bot specific methods
 
     /**
      * @returns true if the discord user has the necessary role in the discord guild, false otherwise. 
@@ -193,4 +200,5 @@ export default class DiscordChannel extends MessagingChannel {
             addRole(foundRole);
         }
     }
+    //#endregion
 }
