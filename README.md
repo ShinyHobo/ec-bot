@@ -5,7 +5,7 @@ Discord bot for Enemy Contact
 - `!help` - Shows all commands
 - `!ping` - Replies with pong.
 - `!roadmap pull` - Pulls down current state of roadmap and stores the delta
-- `!roadmap compare [-s YYYYMMDD -e YYYYMMDD --publish]` - Compares the most recent pull to the previous; use optional start (s) and end (e) arguments to compare alternate date sets
+- `!roadmap compare [-s YYYYMMDD -e YYYYMMDD] [--publish]` - Compares the most recent pull to the previous; use optional start (s) and end (e) arguments to compare alternate date sets
 - `!roadmap teams [--publish]` - Generates a report of currently assigned deliverables
 - `!verify [RSI USERNAME]` - Attempts to verify that Discord account owns RSI user. (Not available for the CLI)
 - `!renew [on/off]` - Turns thread auto renewal on/off. (Not available for the CLI)
