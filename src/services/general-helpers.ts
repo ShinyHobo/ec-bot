@@ -1,4 +1,3 @@
-import { Message, MessageAttachment } from 'discord.js';
 import * as _ from 'lodash';
 
 /** General helper function collection */

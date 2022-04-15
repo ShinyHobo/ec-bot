@@ -1,4 +1,4 @@
-import { Client, Message, ThreadChannel } from 'discord.js';
+import { Client, ThreadChannel } from 'discord.js';
 import Database from 'better-sqlite3';
 import MessagingChannel from '../channels/messaging-channel';
 
