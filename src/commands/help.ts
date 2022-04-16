@@ -19,14 +19,9 @@ export abstract class Help {
      */
     public static execute(channel: MessagingChannel) {
         let messages: Array<string> = [];
-        import('../commands/index').then(botCommands => {
-            Object.keys(botCommands).forEach(key => {
-                if(key !== 'default') {
-                    const command = botCommands[key][key];
-                    messages.push(`* ${command.description}:\n${command.usage.replace('Usage: ','')}`);
-                }
-            });
-            channel.send(messages.join('\n'));
+        channel.getCommands().forEach((command:any, key:string) => {
+            messages.push(`* ${command.description}:\n${command.usage.replace('Usage: ','')}`);
         });
+        channel.send(messages.join('\n'));
     }
 };

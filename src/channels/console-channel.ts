@@ -35,6 +35,8 @@ export default class ConsoleChannel extends MessagingChannel {
         Object.keys(botCommands).map(key => {
             commands.set(botCommands[key][key].command, botCommands[key][key]);
         });
+        commands.delete("!renew"); // discord only
+        commands.delete("!verify");  // discord only
         return commands;
     }
 
