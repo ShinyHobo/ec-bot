@@ -1,5 +1,5 @@
-import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
+import MessagingChannel from '../channels/messaging-channel';
 
 /**
  * Bot command for verifying and associating a given Discord user with an RSI account
@@ -17,29 +17,25 @@ export abstract class Verify {
 
     /**
      * Executes the bot commands
-     * @param msg The msg that triggered the command
-     * @param args Available arguments included with the command
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    public static execute(msg: Message, args: Array<string>, db: Database) {
-        if(!msg.guild) {
-            msg.reply('Command must be run from within server!').catch(console.error);
+    public static execute(channel: MessagingChannel) {
+        if(!channel.getGuild()) {
+            channel.reply('Command must be run from within discord server!');
             return;
         }
 
-        if(args.length !== 1) {
-            msg.reply(this.usage).catch(console.error);
+        if(channel.args.length !== 1) {
+            channel.reply(this.usage);
             return;
         }
-
-        const noMsg = () => {msg.reply('Please ensure you allow messages from server members and try again.').catch(console.error);};
 
         const exe = async () => {
             const lookup = async (username) => {
                 return await new Promise((resolve, reject)=> {
                     require('https').get(`https://robertsspaceindustries.com/citizens/${username}`, (res) => {
                         if(res.statusCode === 404) { // Citizen does not exist
-                            msg.reply('I could not find a citizen with that username!').catch(console.error);
+                            channel.reply('I could not find a citizen with that username!');
                             resolve(false);
                         } else if(res.statusCode === 200) { // Citizen exists, check for code
                             let data = '';
@@ -59,16 +55,16 @@ export abstract class Verify {
                                 resolve('this is not a uuid');
                             });
                         } else {
-                            msg.reply('There was no response from RSI server!').catch(console.error);
+                            channel.reply('There was no response from RSI server!');
                             resolve(false);
                         }
                     }).on('error', (error) => {
                       reject(error);
                     });
-                }).catch(err => msg.reply('I\'ve had trouble contacting the RSI server. Please try again!').catch(console.error));
+                }).catch(err => channel.reply('I\'ve had trouble contacting the RSI server. Please try again!'));
             };
     
-            const result = await lookup(args[0]);
+            const result = await lookup(channel.args[0]);
 
             if(!result) {
                 return;
@@ -79,60 +75,30 @@ export abstract class Verify {
             const resultUuid = regex.exec(result.toString());
 
             // Check to see if user is already in db
-            const verification = db.prepare('SELECT * FROM verification WHERE discord_id = ?').get(msg.member.id);
+            let db: Database = channel.db;
+            let memberId = channel.getMemberId();
+            const verification = db.prepare('SELECT * FROM verification WHERE discord_id = ?').get();
 
             const uuid = require('uuid');
             const code = uuid.v4();
             
             if(!verification && !resultUuid) {
                 // create code and send
-                db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
-                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
-                    .then(() => msg.reply('Please check your DMs for your verification code.').catch(console.error))
-                    .catch(() => noMsg());
+                db.prepare('INSERT INTO verification VALUES (?,?)').run([memberId, code]);
+                channel.sendAuthor(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
             } else if(!verification && resultUuid) {
                 // create code and send, tell to remove existing code
-                db.prepare('INSERT INTO verification VALUES (?,?)').run([msg.member.id,code]);
-                msg.author.send(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun 
-                    the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``)
-                    .then(() => msg.reply('Please check your DMs for your verification code.').catch(console.error))
-                    .catch(() => noMsg());
+                db.prepare('INSERT INTO verification VALUES (?,?)').run([memberId,code]);
+                channel.sendAuthor(`Existing verification UUID found, but not associated with your account. Please remove ${resultUuid}, and then copy the following into your RSI bio and rerun 
+                    the command. After you are verified, feel to undo your changes: \`\`\`${code}\`\`\``);
             } else if(verification && !resultUuid) {
                 // send old code reminder
-                msg.author.send(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``)
-                    .then(() => msg.reply('Please check your DMs for your verification code.').catch(console.error))    
-                    .catch(() => noMsg());
+                channel.sendAuthor(`Please copy the following into your RSI bio and rerun the command. After you are verified, feel to undo your changes: \`\`\`${verification.code}\`\`\``);
             } else if(verification.code === resultUuid[0]) {
-                // if uuid matches
-                const giveRole = (role) => {
-                    msg.member.roles.add(role);
-                    if(!msg.member.roles.cache.has(role.id)) {
-                        msg.reply('Your RSI user has been verified').catch(console.error);
-                    } else {
-                        msg.reply('Your RSI user has been reverified').catch(console.error);
-                    }
-                };
-
                 // Create 'RSI Verified' role
-                const roleName = 'RSI Verified';
-                const role = msg.guild.roles.cache.find(role => role.name === roleName);
-                if(!role) {
-                    msg.member.guild.roles.create({
-                        name: roleName,
-                        color: 'BLUE',
-                        reason: 'Need role for tagging verified members'
-                    })
-                    .then(r => {
-                        // give role here
-                        giveRole(r);
-                    })
-                    .catch(console.error);
-                } else {
-                    // give role here
-                    giveRole(role);
-                }
+                channel.giveRole('RSI Verified');
             } else {
-                msg.author.send(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${verification.code}\`\`\``).catch(console.log);
+                channel.sendAuthor(`The verification code you used was incorrect. Please update your bio with the following code and try again: \`\`\`${verification.code}\`\`\``);
             }
         };
 

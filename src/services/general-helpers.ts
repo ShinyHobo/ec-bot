@@ -1,4 +1,3 @@
-import { Message, MessageAttachment } from 'discord.js';
 import * as _ from 'lodash';
 
 /** General helper function collection */
@@ -141,13 +140,4 @@ export default abstract class GeneralHelpers {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}  \n`.toString();
     }
 
-    /**
-     * Sends a long text message to Discord as a file
-     * @param messages The messages to include in the file
-     * @param filename The filename to use
-     * @param msg The command message
-     */
-    public static async sendTextMessageFile(messages: string[], filename: string, msg: Message, unescape: boolean = true) {
-        await msg.channel.send({files: [new MessageAttachment(Buffer.from(unescape ? _.unescape(messages.join('')) : messages.join(''), "utf-8"), filename)]}).catch(console.error);
-    }
 }

@@ -1,4 +1,3 @@
-import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
@@ -7,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import GeneralHelpers from '../services/general-helpers';
 import RSINetwork from '../services/rsi-network';
+import MessagingChannel from '../channels/messaging-channel';
 
 /**
  * Bot commands for analyzing the RSI roadmap and progress tracker
@@ -22,8 +22,8 @@ export abstract class Roadmap {
     /**
      * The bot command pattern
      * --publish can be added to compare and teams to generate extras for website publishing */
-    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
-        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams <- Generates a report of currently assigned deliverables`';
+    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] [--publish] '+
+        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams [--publish] <- Generates a report of currently assigned deliverables`';
     //#endregion
 
     //#region Private properies
@@ -42,32 +42,29 @@ export abstract class Roadmap {
 
     /**
      * Executes the bot commands
-     * @param msg The msg that triggered the command
-     * @param args Available arguments included with the command
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    public static execute(msg: Message, args: Array<string>, db: Database) {
-        // const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
-        // if(officer && !msg.member.roles.highest.comparePositionTo(officer)) {
-        //     // inufficient privileges
-        //     return;
+    public static execute(channel: MessagingChannel) {
+        // if (channel.isAuthorized) {
+        // 	return;
         // }
 
+        let args = channel.args;
         switch(args[0]) {
             case 'pull':
-                this.delta(msg, db);
+                this.delta(channel);
                 break;
             case 'compare':
-                this.generateProgressTrackerDeltaReport(args, msg, db);
+                this.generateProgressTrackerDeltaReport(channel);
                 break;
             case 'teams':
-                this.lookup(args, msg, db);
+                this.lookup(channel);
                 break;
             case 'export':
-                this.exportJson(args, msg, db, true);
+                this.exportJson(channel, true);
                 break;
             default:
-                msg.channel.send(this.usage).catch(console.error);
+                channel.send(this.usage);
                 break;
         }
     }
@@ -75,11 +72,10 @@ export abstract class Roadmap {
     //#region Generate Delta
     /**
      * Looks up data from RSI and stores the delta
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static async delta(msg: Message, db: Database) {
-        msg.channel.send('Retrieving roadmap state...').catch(console.error);
+    private static async delta(channel: MessagingChannel) {
+        channel.send('Retrieving roadmap state...');
         let start = Date.now();
         let deliverables = [];
         let offset = 0;
@@ -97,7 +93,7 @@ export abstract class Roadmap {
 
         Promise.all(deliverablePromises).then((responses)=>{
             if(!completedQuery) {
-                return msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
+                return channel.send(`Roadmap retrieval timed out; please try again later.`);
             }
 
             responses.forEach((response)=>{
@@ -113,7 +109,7 @@ export abstract class Roadmap {
 
             Promise.all(teamPromises).then(async (responses) => {
                 if(!completedQuery) {
-                    return msg.channel.send(`Roadmap team retrieval timed out; please try again later.`).catch(console.error);
+                    return channel.send(`Roadmap team retrieval timed out; please try again later.`);
                 }
 
                 const disciplinePromises = []; // get dev lists for each team/deliverable combination
@@ -128,7 +124,7 @@ export abstract class Roadmap {
 
                 Promise.all(disciplinePromises).then(async (disciplineResults) => {
                     if(!completedQuery) {
-                        return msg.channel.send(`Roadmap discipline retrieval timed out; please try again later.`).catch(console.error);
+                        return channel.send(`Roadmap discipline retrieval timed out; please try again later.`);
                     }
                     disciplineResults.forEach(disciplines => {
                         disciplines.forEach(discipline => {
@@ -150,6 +146,7 @@ export abstract class Roadmap {
                     console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
 
                     const compareTime = Date.now();
+                    const db = channel.db;
 
                     // populate db with initial values
                     let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
@@ -167,10 +164,10 @@ export abstract class Roadmap {
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
-                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
-                            ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                        channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
+                            ` Type \`!roadmap compare\` to compare to the last update!`);
                     } else {
-                        msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                        channel.send('No changes have been detected since the last pull.');
                     }
                 }).catch(console.error);
             }).catch(console.error);
@@ -477,15 +474,14 @@ export abstract class Roadmap {
     //#region Generate Progress Tracker Delta Report
     /**
      * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
-     * @param argv The available arguments
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static async generateProgressTrackerDeltaReport(argv: Array<string>, msg: Message, db: Database) {
+    private static async generateProgressTrackerDeltaReport(channel: MessagingChannel) {
         let start: number = null;
         let end: number = null;
 
-        const args = require('minimist')(argv.slice(1));
+        const args = require('minimist')(channel.args.slice(1));
+        const db = channel.db;
 
         // select closest existing date prior to or on entered date
         if(args['e'] && args['e'] !== true) {
@@ -510,16 +506,16 @@ export abstract class Roadmap {
         }
 
         if(!start || !end || start >= end ) {
-            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+            return channel.send('Invalid timespan or insufficient data to generate report.');
         }
 
-        msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
+        channel.send('Calculating differences between roadmaps...');
 
         const first = this.buildDeliverables(start, db, true);
         const last = this.buildDeliverables(end, db, true);
         const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
 
-        let messages = [];
+        let messages: string[] = [];
         const compareTime = end;
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
@@ -762,7 +758,7 @@ export abstract class Roadmap {
             messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
         }
 
-        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, msg);
+        channel.sendTextFile(messages.join(''), `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, true);
     }
 
     /**
@@ -985,12 +981,11 @@ export abstract class Roadmap {
 
     /**
      * Looks up raw data for a given time period or date [TODO]
-     * @param argv The available arguments
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static lookup(argv: Array<string>, msg: Message, db: Database) {
-        const args = require('minimist')(argv);
+    private static lookup(channel: MessagingChannel) {
+        const args = require('minimist')(channel.args);
+        const db = channel.db;
         if(args['_'][0] === 'teams') {
             let compareTime = null;
             if(!args['t']) {
@@ -1006,12 +1001,12 @@ export abstract class Roadmap {
                 const deliverables = this.buildDeliverables(compareTime, db, true);
                 const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
                 if(!messages.length) {
-                    msg.channel.send("Insufficient data to generate report.");
+                    channel.send("Insufficient data to generate report.");
                     return;
                 }
-                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, msg);
+                channel.sendTextFile(messages.join(''), `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, true);
             } else {
-                msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
+                channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
         }
 
@@ -1395,15 +1390,15 @@ export abstract class Roadmap {
 
     /**
      * Converts database model(s) to json and exports them
-     * @param argv The argument array (-t YYYYMMDD for specific one or --all for all)
-     * @param msg The command message
-     * @param db The database connection
+     * Arguments: (-t YYYYMMDD for specific one or --all for all)
+     * @param channel The origin channel that triggered the command, also provides additional command arguments  and the database connection
      * @param discord Whether to send the file to discord or to save locally
      */
-    private static async exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
+    private static async exportJson(channel: MessagingChannel, discord: boolean = false) {
         let exportDates: number[] = [];
 
-        const args = require('minimist')(argv.slice(1));
+        const args = require('minimist')(channel.args.slice(1));
+        const db = channel.db;
 
         if(args['all'] === true) {
             exportDates = this.getDeliverableDeltaDateList(db);
@@ -1420,7 +1415,7 @@ export abstract class Roadmap {
             }
 
             if(!exportDates.length) {
-                return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+                return channel.send('Invalid timespan or insufficient data to generate report.');
             }
         }
 
@@ -1488,14 +1483,14 @@ export abstract class Roadmap {
             const json = JSON.stringify(deliverablesToExport);
 
             if(discord && this.AllowExportSnapshotsToDiscord) {
-                GeneralHelpers.sendTextMessageFile([json], filename, msg, false);
+                channel.sendTextFile(json, filename, false);
             } else {
                 // save to local directory
                 const data_exports = path.join(__dirname, '..', 'data_exports');
                 await fs.mkdir(data_exports, { recursive: true }, (err) => {
                     if (err) throw err;
                   });
-                fs.writeFile(path.join(data_exports, filename), json, () => {msg.channel.send('Export complete.');});
+                fs.writeFile(path.join(data_exports, filename), json, () => {channel.send('Export complete.');});
             }
         });
     }
