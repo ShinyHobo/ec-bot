@@ -21,9 +21,9 @@ export default class DiscordChannel extends MessagingChannel {
      run() {
         this.bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES], partials: ["CHANNEL"] });
         this.bot.login(process.env.TOKEN);
-        this.bot.on('ready', this.onBotReady);
-        this.bot.on('messageCreate', this.onBotMessage); // Watch the message history for commands
-        this.bot.on('threadUpdate', this.onBotThreadUpdate);
+        this.bot.on('ready', this.onBotReady.bind(this));
+        this.bot.on('messageCreate', this.onBotMessage.bind(this)); // Watch the message history for commands
+        this.bot.on('threadUpdate', this.onBotThreadUpdate.bind(this));
     }
 
     /**
@@ -77,7 +77,7 @@ export default class DiscordChannel extends MessagingChannel {
      * Creates a shallow copy of this DiscordChannel object.
      * @returns A new DiscordChannel object.
      */
-     getClone(): DiscordChannel {
+    getClone(): DiscordChannel {
         let discordChannel = new DiscordChannel(this.db);
         discordChannel.bot = this.bot;
         return discordChannel;
