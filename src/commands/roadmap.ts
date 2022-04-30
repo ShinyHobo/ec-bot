@@ -411,7 +411,7 @@ export abstract class Roadmap {
                         }
                     }
 
-                    const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
+                    const projectIds = _.unique(d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); })).toString();
 
                     let did = null;
                     if(!dMatch || (dMatch && gd.length)) {
@@ -1571,7 +1571,7 @@ export abstract class Roadmap {
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
         if(remainingDeliverables.length) {
-            messages.push(`**Deliverables Added**\n`);
+            messages.push(`**Deliverables Updated**\n`);
             remainingDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
