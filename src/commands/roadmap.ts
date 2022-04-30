@@ -1516,7 +1516,6 @@ export abstract class Roadmap {
 
         const first = this.buildDeliverables(start, db, true);
         const last = this.buildDeliverables(end, db, true);
-        const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
         let messages: string[] = [
             `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)} **\n`,
             `<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n`,
@@ -1571,6 +1570,115 @@ export abstract class Roadmap {
         }
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
+        if(remainingDeliverables.length) {
+            messages.push(`**Deliverable Added**\n`);
+            remainingDeliverables.forEach(f => {
+                const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
+                const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
+                if(d.length && l) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+
+                    let update = [];
+                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
+                        if(dChanges.some(p => p.change === 'startDate')) {
+                            const oldDate = new Date(f.startDate);
+                            const newDate = new Date(l.startDate);
+
+                            let updateText = "";
+                            if(f.startDate < end && l.startDate < end) {
+                                updateText = "corrected";
+                            } else if(newDate < oldDate) {
+                                updateText = "retracted";
+                            } else if(oldDate < newDate) {
+                                updateText = "extended";
+                            }
+
+                            update.push(`Start date ${updateText}`);
+                        }
+                        if(dChanges.some(p => p.change === 'endDate')) {
+                            const oldDate = new Date(f.endDate);
+                            const newDate = new Date(l.endDate);
+
+                            let updateText = "";
+                            if((end < f.endDate && l.endDate < end) || (end > f.endDate && newDate < oldDate) || newDate < oldDate) {
+                                updateText = "retracted"; // likely team time allocation was removed, but could have finished early
+                            } else if(oldDate < newDate) {
+                                updateText = "extended";
+                            }
+
+                            update.push(`End date ${updateText}`);
+                        }
+
+                        let netWork = 0;
+                        if(dChanges.some(p => p.change === 'teams')) {
+                            const teamChangesToDetect = ['startDate', 'endDate', 'timeAllocations']; // possible for start and end to remain the same while having shifting time allocations
+                            _.orderBy(l.teams, [t => t.title.toLowerCase()], ['asc']).forEach(lt => { // added/modified
+                                const lDiff = GeneralHelpers.mergeDateRanges(lt.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
+                                const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
+                                const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
+                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
+                                if(teamMatch) {
+                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
+                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
+
+                                    if(tChanges.length) {
+                                        const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
+                                        const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
+                                        const tmDiff = GeneralHelpers.mergeDateRanges(teamMatch.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
+                                        const timeDiff = lDiff - tmDiff; // positive is more work
+                                        const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
+                                        const tmDaysRemaining = GeneralHelpers.convertMillisecondsToDays(tmAssignedEnd - (end < tmAssignedStart ? tmAssignedStart : end));
+                                        const extraDays = dayDiff - tmDaysRemaining;
+                                        const displayDays = extraDays < 0 ? dayDiff : tmDaysRemaining;
+
+                                        if(dayDiff) {
+                                            if(tmDiff === 0 && dayDiff > 0) {
+                                                netWork =+ displayDays;
+                                            } else if(displayDays > 0) {
+                                                if(timeDiff > 0) {
+                                                    netWork += displayDays;
+                                                } else {
+                                                    netWork -= displayDays;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    const daysRemaining = GeneralHelpers.convertMillisecondsToDays(assignedEnd - end);
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
+                                    const extraDays = dayDiff - daysRemaining;
+                                    netWork += extraDays < 0 ? dayDiff : extraDays;
+                                }
+                            });
+
+                            // removed teams
+                            if(f.teams) {
+                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
+                                removedTeams.forEach(rt => {
+                                    const rtDiff = rt.endDate - rt.startDate;
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(rtDiff);
+                                    netWork -= dayDiff;
+                                });
+                            }
+                        }
+
+                        if(netWork > 0) {
+                            update.push('Work added');
+                        } else if(netWork < 0) {
+                            update.push('Work removed');
+                        }
+
+                        if(update.length) {
+                            const title = f.title === 'Unannounced' ? f.description : f.title;
+                            update = _.uniq(update);
+                            messages.push(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`);
+                        }
+                    }
+                }
+            });
+            messages.push(`\n`);
+        }
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
         channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
