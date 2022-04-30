@@ -1550,7 +1550,7 @@ export abstract class Roadmap {
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced")))); // :SCN1:
         if(newDeliverables.length) {
-            messages.push(`**Deliverable Added**\n`);
+            messages.push(`**Deliverables Added**\n`);
             newDeliverables.forEach(d => {
                 let devs = 0;
                 if(d.teams) {
@@ -1571,7 +1571,7 @@ export abstract class Roadmap {
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
         if(remainingDeliverables.length) {
-            messages.push(`**Deliverable Added**\n`);
+            messages.push(`**Deliverables Added**\n`);
             remainingDeliverables.forEach(f => {
                 const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
@@ -1679,6 +1679,69 @@ export abstract class Roadmap {
             });
             messages.push(`\n`);
         }
+
+        messages.push("**Ongoing Sprints**\n");
+        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+        const teams = _.uniqBy(last.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${end} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${last.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const previouslyScheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${start} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${first.map(l => l.id).toString()}) GROUP BY uuid`).all();
+
+        // Consolidate discipline schedules
+        const currentTasks = scheduledTasks.filter(st => st.startDate <= end); // tasks that encompass the comparison time
+        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack);
+        const scheduledDeliverables = last.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
+        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= end + lookForwardOrBack); // tasks that begin within the next two weeks
+        const futureDisciplineSchedules = this.getDisciplineSchedules(last, futureTasks, end, lookForwardOrBack, true);
+
+        const previousCompare = start;
+        const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= previousCompare); // tasks that encompass the comparison time
+        const previousDisciplineSchedules = this.getDisciplineSchedules(first, previousTasks, previousCompare, lookForwardOrBack);
+        const previousDeliverables = first.filter(d => previousDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
+        const previousFutureTasks = previouslyScheduledTasks.filter(ft => !previousTasks.some(st => st.id === ft.id ) && ft.startDate <= previousCompare + lookForwardOrBack); // tasks that begin within the next two weeks
+        const previousFutureDisciplineSchedules = this.getDisciplineSchedules(first, previousFutureTasks, previousCompare, lookForwardOrBack, true);
+
+        scheduledDeliverables.forEach(d => {
+            const dMatch = previousDeliverables.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced")));
+            let matchDevs = 0;
+            if(dMatch && dMatch.teams) {
+                const schedule = previousDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
+                const futureSchedule = previousFutureDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
+                if(futureSchedule) {
+                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
+                    schedule.teams = [...schedule.teams, ...futureTeams];
+                }
+                schedule.teams.forEach((mt, i) => {
+                    let wf = this.generateWaterfallChart(mt, previousCompare, futureSchedule, false);
+                    
+                    wf.split('\n').forEach(s => {
+                        if(s.startsWith(' -')) {
+                            matchDevs += +s.split('- ')[1].split('x')[0];
+                        }
+                    });
+                });
+            }
+            let devs = 0;
+            if(d.teams) {
+                const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+                const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+                if(futureSchedule) {
+                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
+                    schedule.teams = [...schedule.teams, ...futureTeams];
+                }
+                schedule.teams.forEach((mt, i) => {
+                    this.generateWaterfallChart(mt, start, futureSchedule, false).split('\n').forEach(s => {
+                        if(s.startsWith(' -')) {
+                            devs += +s.split('- ')[1].split('x')[0];
+                        }
+                    });
+                });
+            }
+
+            let title = d.title.includes("Unannounced") ? d.description : d.title;
+            let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
+            let devText = `[${devs} Active Dev${devs>1?'s':''}:${devState}:] `;
+            messages.push(he.unescape(`:SCN2: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
+        });
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
         channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
