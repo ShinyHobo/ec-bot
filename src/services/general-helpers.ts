@@ -10,6 +10,12 @@ export default abstract class GeneralHelpers {
     private static shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     /** The months of the year in long format */
     private static longMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    /** The available project icons */
+    public static readonly ProjectIcons = Object.freeze({
+        SQ42: ":SQ:",
+        SC: ":SC:"
+    });
     
     /**
      * The YYYYMMDD or YYYY-MM-DD date to convert
@@ -36,6 +42,19 @@ export default abstract class GeneralHelpers {
         const month = ("0" + (date.getMonth() + 1)).slice(-2);
         const day = ("0" + date.getDate()).slice(-2);
         return `${year}${hyphenate?'-':''}${month}${hyphenate?'-':''}${day}`;
+    }
+
+    /**
+     * Converts time in milliseconds to a date string in D MMMM YYYY format
+     * @param time The time in milliseconds to convert
+     * @returns The date string in D MMMM YYYY format
+     */
+    public static convertTimeToSummaryDate(time: number): string {
+        const date = new Date(time);
+        const year = date.getUTCFullYear();
+        const month = this.longMonths[date.getUTCMonth()];
+        const day = date.getUTCDate().toString();
+        return `${day} ${month} ${year}`;
     }
 
     /**
@@ -140,4 +159,16 @@ export default abstract class GeneralHelpers {
         return `${text.replace(/(?![^\n]{1,100}$)([^\n]{1,100})\s/g, '$1\n')}  \n`.toString();
     }
 
+    /**
+     * Gets the approriate SC subreddit discord icons for the given deliverable
+     * @param deliverable The deliverable
+     * @returns The icon codes as a string
+     */
+    public static getProjectIcons(deliverable: any): string {
+        let projectIcons = "";
+        deliverable.project_ids.split(',').forEach(p => {
+            projectIcons += `${this.ProjectIcons[p]} `;
+        });
+        return projectIcons;
+    }
 }

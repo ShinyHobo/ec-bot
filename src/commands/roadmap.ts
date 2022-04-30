@@ -1517,13 +1517,45 @@ export abstract class Roadmap {
         const first = this.buildDeliverables(start, db, true);
         const last = this.buildDeliverables(end, db, true);
         const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
-        let messages: string[] = [];
+        let messages: string[] = [
+            `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)} **\n`,
+            `<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n`,
+            "<https://shinytracker.app/>\n\n"
+        ];
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")))); // :SCN2:
+        if(removedDeliverables.length) {
+            messages.push(`**Deliverables Removed**\n`);
+            removedDeliverables.forEach(d => {
+                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
+                let devs = 0;
+                if(dMatch.teams) {
+                    const freedTeams = dMatch.teams.filter(t => t.timeAllocations);
+                    freedTeams.forEach(ft => {
+                        GeneralHelpers.mergeDateRanges(ft.timeAllocations);
+                        const disciplineSchedules = _._(ft.timeAllocations).groupBy('discipline_id').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            const load = this.generateLoad(ds, end, d);
+                            if(load.tasks) {
+                                devs += ds[0].numberOfMembers;
+                            }
+                        });
+                    });
+                }
+                let title = d.title.includes("Unannounced") ? d.description : d.title;
+                messages.push(he.unescape(`:SCN2: ${title.trim()} [${devs} Dev${devs>1?'s':''}] ${GeneralHelpers.getProjectIcons(d)}\n`));
+            });
+        }
+
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced")))); // :SCN1:
+
+
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
 
-
+        const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
+        channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
+        // TODO - regex remove :[A-z,0-9]:
+        //channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
     }
 
     //#region Helper methods
