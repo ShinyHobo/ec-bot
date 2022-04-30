@@ -51,17 +51,20 @@ export abstract class Roadmap {
 
         let args = channel.args;
         switch(args[0]) {
-            case 'pull':
+            case 'pull': // pulls down the latest version of the progress tracker and stores the changes
                 this.delta(channel);
                 break;
-            case 'compare':
+            case 'compare': // generates a report detailing the changes between two versions of the progress tracker
                 this.generateProgressTrackerDeltaReport(channel);
                 break;
-            case 'teams':
+            case 'teams': // generates a report detailing the work being done in the next two weeks
                 this.lookup(channel);
                 break;
-            case 'export':
+            case 'export': // exports a given version of the progress tracker as a .json mirror of what is pulled in by "pull"
                 this.exportJson(channel, true);
+                break;
+            case 'summary': // generates reports for use by the SC subreddit news team
+                this.generateSummary(channel);
                 break;
             default:
                 channel.send(this.usage);
@@ -1493,6 +1496,34 @@ export abstract class Roadmap {
                 fs.writeFile(path.join(data_exports, filename), json, () => {channel.send('Export complete.');});
             }
         });
+    }
+
+    /**
+     * Generates summary reports for the SC subreddit news team
+     * @param channel The origin channel that triggered the command, also provides additional command arguments  and the database connection
+     */
+    private static generateSummary(channel: MessagingChannel) {
+        const db = channel.db;
+
+        const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+        const end = dbEnd && dbEnd.addedDate;
+        const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
+        const start = dbStart && dbStart.addedDate;
+
+        if(!start || !end || start >= end ) {
+            return channel.send('Invalid insufficient data to generate summary.');
+        }
+
+        const first = this.buildDeliverables(start, db, true);
+        const last = this.buildDeliverables(end, db, true);
+        const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
+        let messages: string[] = [];
+
+        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")))); // :SCN2:
+        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced")))); // :SCN1:
+        const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
+
+
     }
 
     //#region Helper methods
