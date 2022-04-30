@@ -1543,12 +1543,32 @@ export abstract class Roadmap {
                     });
                 }
                 let title = d.title.includes("Unannounced") ? d.description : d.title;
-                messages.push(he.unescape(`:SCN2: ${title.trim()} [${devs} Dev${devs>1?'s':''}] ${GeneralHelpers.getProjectIcons(d)}\n`));
+                let devText = `[${devs} Dev${devs>1?'s':''}] `;
+                messages.push(he.unescape(`:SCN2: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
             });
+            messages.push(`\n`);
         }
 
         const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced")))); // :SCN1:
-
+        if(newDeliverables.length) {
+            messages.push(`**Deliverable Added**\n`);
+            newDeliverables.forEach(d => {
+                let devs = 0;
+                if(d.teams) {
+                    _.orderBy(d.teams, [t => t.title.toLowerCase()], ['asc']).forEach(t => {
+                        const disciplineSchedules = _._(t.timeAllocations).groupBy('title').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            devs += ds[0].numberOfMembers;
+                        });
+                    });
+                    
+                    let title = d.title.includes("Unannounced") ? d.description : d.title;
+                    let devText = `[${devs} Dev${devs>1?'s':''}] `;
+                    messages.push(he.unescape(`:SCN1: ${title.trim()} ${devs?devText:''}${GeneralHelpers.getProjectIcons(d)}\n`.toString()));
+                }
+            });
+            messages.push(`\n`);
+        }
 
         const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
 
