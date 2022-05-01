@@ -1516,11 +1516,7 @@ export abstract class Roadmap {
 
         const first = this.buildDeliverables(start, db, true);
         const last = this.buildDeliverables(end, db, true);
-        let messages: string[] = [
-            `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)} **\n`,
-            `<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n`,
-            "<https://shinytracker.app/>\n\n"
-        ];
+        let messages: string[] = [];
 
         const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")))); // :SCN2:
         if(removedDeliverables.length) {
@@ -1744,9 +1740,11 @@ export abstract class Roadmap {
         });
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
-        channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
-        // TODO - regex remove :[A-z,0-9]:
-        //channel.sendTextFile(messages.join(''), `${filename}.txt`, true);
+        const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)} **\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
+        const report = messages.join('');
+        const strippedReport = report.replace(/:[^:]+: /g, '');
+        channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
+        channel.sendTextFile(reportHeader + strippedReport, `${filename}_-_Removed.txt`, true);
     }
 
     //#region Helper methods
