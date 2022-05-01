@@ -1740,7 +1740,7 @@ export abstract class Roadmap {
         });
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
-        const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)} **\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
+        const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
         const report = messages.join('');
         const strippedReport = report.replace(/:[^:]+: /g, '');
         channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
