@@ -411,7 +411,7 @@ export abstract class Roadmap {
                         }
                     }
 
-                    const projectIds = _.unique(d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); })).toString();
+                    const projectIds = _.uniq(d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); })).toString();
 
                     let did = null;
                     if(!dMatch || (dMatch && gd.length)) {
