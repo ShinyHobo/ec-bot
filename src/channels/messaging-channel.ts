@@ -35,8 +35,7 @@ export default abstract class MessagingChannel {
         let commands = this.getCommands();
         let commandString = prefix + this.args.shift().toLowerCase();
         if (!commands.has(commandString)) {
-            console.error("Unknown command!");
-            commandString = "!help";
+            return;
         }
 
         try {
