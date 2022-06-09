@@ -751,9 +751,14 @@ export abstract class Roadmap {
                             updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
 
                             if(!f.card && l.card) {
-                                updatedMessages.push(GeneralHelpers.shortenText(`\* Added to the ${l.card.release_title} release window:  \n"${l.card.description}"`));
-                                const cardImage = l.card.thumbnail.includes(RSINetwork.rsi) ? l.card.thumbnail : `https://${RSINetwork.rsi}${l.card.thumbnail}`;
-                                updatedMessages.push(`![](${cardImage})  \n`);
+                                updatedMessages.push(GeneralHelpers.shortenText(`\* Added to the ${l.card.release_title} release window  \n`));
+                                if(args['publish']) {
+                                    const cardImage = l.card.thumbnail.includes(RSINetwork.rsi) ? l.card.thumbnail : `https://${RSINetwork.rsi}${l.card.thumbnail}`;
+                                    updatedMessages.push(`![](${cardImage})  \n`);
+                                    updatedMessages.push(`<sup>"${l.card.description}"</sup>  \n\n`);
+                                } else {
+                                    updatedMessages.push(`"${l.card.description}"  \n\n`);
+                                }
                             } else if(f.card && !l.card) {
                                 updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
                             } else if(l.card) {
