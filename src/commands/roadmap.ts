@@ -609,7 +609,7 @@ export abstract class Roadmap {
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams', 'card_id'];
 
                     let update = [];
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
@@ -725,7 +725,19 @@ export abstract class Roadmap {
                             }
                         }
 
-                        if(update.length) {
+                        let cardChanges = false;
+                        if(dChanges.some(p => p.change === 'card_id')) {
+                            const d = diff.getDiff(l.card, f.card);
+                            if(d.filter((df) => df.op === 'update').length) {
+                                const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                                const changesToDetect = ['title','description', 'category', 'release_title'];
+                                cardChanges = dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).length > 0;
+                            }  else {
+                                cardChanges = true;
+                            }
+                        }
+
+                        if(update.length || cardChanges) {
                             const deltaHeader = [];
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
@@ -738,7 +750,11 @@ export abstract class Roadmap {
 
                             updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
 
-                            if(f.card && !l.card) {
+                            if(!f.card && l.card) {
+                                updatedMessages.push(GeneralHelpers.shortenText(`\* Added to the ${l.card.release_title} release window:  \n"${l.card.description}"`));
+                                const cardImage = l.card.thumbnail.includes(RSINetwork.rsi) ? l.card.thumbnail : `https://${RSINetwork.rsi}${l.card.thumbnail}`;
+                                updatedMessages.push(`![](${cardImage})  \n`);
+                            } else if(f.card && !l.card) {
                                 updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
                             } else if(l.card) {
                                 updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
