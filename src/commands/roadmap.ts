@@ -1106,15 +1106,17 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate).sort((a,b)=>b-a))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
+        let summary = `There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams`;
+
         //#region Preamble
         if(publish) {
-            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
+            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables", summary);
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
         messages.push(`#### as of ${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)} ####  \n`);
 
-        messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push(`## ${summary} ##  \n`);
 
         // TODO list deliverables to start with teams
         messages.push(`### ${newScheduledDeliverables.length} deliverables ${past?'were':'are'} scheduled to begin work by ${futureTeamTasks.length} team(s) within two weeks ###  \n`);

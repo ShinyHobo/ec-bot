@@ -144,10 +144,16 @@ export default abstract class GeneralHelpers {
      * Generates YAML frontmatter for use on a Jekyll website
      * @param date The date the report is for
      * @param category The category of the post (should be a ReportCategoryEnum)
+     * @param title The title text
+     * @param excerpt The excerpt text
      * @returns The YAML frontmatter
      */
-    public static generateFrontmatter(date: string, category: string, title: string): string[] {
-        return ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
+    public static generateFrontmatter(date: string, category: string, title: string, excerpt: string = null): string[] {
+        let frontmatter = ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
+        if(excerpt) {
+            frontmatter.push(`excerpt: "${excerpt}"  \n`);
+        }
+        return frontmatter;
     }
 
     /**
