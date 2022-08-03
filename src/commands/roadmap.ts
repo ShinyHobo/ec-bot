@@ -1,4 +1,3 @@
-import { Message } from 'discord.js';
 import Database from 'better-sqlite3';
 import * as diff from 'recursive-diff';
 import * as he from 'he';
@@ -7,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import GeneralHelpers from '../services/general-helpers';
 import RSINetwork from '../services/rsi-network';
+import MessagingChannel from '../channels/messaging-channel';
 
 /**
  * Bot commands for analyzing the RSI roadmap and progress tracker
@@ -22,8 +22,8 @@ export abstract class Roadmap {
     /**
      * The bot command pattern
      * --publish can be added to compare and teams to generate extras for website publishing */
-    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] '+
-        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams <- Generates a report of currently assigned deliverables`';
+    public static readonly usage = 'Usage: `!roadmap  \n\tpull <- Pulls progress tracker delta  \n\tcompare [-s YYYYMMDD, -e YYYYMMDD] [--publish] '+
+        '<- Generates a delta report for the given dates; leave none for most recent  \n\tteams [--publish] <- Generates a report of currently assigned deliverables`';
     //#endregion
 
     //#region Private properies
@@ -42,32 +42,32 @@ export abstract class Roadmap {
 
     /**
      * Executes the bot commands
-     * @param msg The msg that triggered the command
-     * @param args Available arguments included with the command
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    public static execute(msg: Message, args: Array<string>, db: Database) {
-        // const officer = msg.guild.roles.cache.find(role => role.name === 'Officer');
-        // if(officer && !msg.member.roles.highest.comparePositionTo(officer)) {
-        //     // inufficient privileges
-        //     return;
+    public static execute(channel: MessagingChannel) {
+        // if (channel.isAuthorized) {
+        // 	return;
         // }
 
+        let args = channel.args;
         switch(args[0]) {
-            case 'pull':
-                this.delta(msg, db);
+            case 'pull': // pulls down the latest version of the progress tracker and stores the changes
+                this.delta(channel);
                 break;
-            case 'compare':
-                this.generateProgressTrackerDeltaReport(args, msg, db);
+            case 'compare': // generates a report detailing the changes between two versions of the progress tracker
+                this.generateProgressTrackerDeltaReport(channel);
                 break;
-            case 'teams':
-                this.lookup(args, msg, db);
+            case 'teams': // generates a report detailing the work being done in the next two weeks
+                this.lookup(channel);
                 break;
-            case 'export':
-                this.exportJson(args, msg, db, true);
+            case 'export': // exports a given version of the progress tracker as a .json mirror of what is pulled in by "pull"
+                this.exportJson(channel, true);
+                break;
+            case 'summary': // generates reports for use by the SC subreddit news team
+                this.generateSummary(channel);
                 break;
             default:
-                msg.channel.send(this.usage).catch(console.error);
+                channel.send(this.usage);
                 break;
         }
     }
@@ -75,11 +75,10 @@ export abstract class Roadmap {
     //#region Generate Delta
     /**
      * Looks up data from RSI and stores the delta
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static async delta(msg: Message, db: Database) {
-        msg.channel.send('Retrieving roadmap state...').catch(console.error);
+    private static async delta(channel: MessagingChannel) {
+        channel.send('Retrieving roadmap state...');
         let start = Date.now();
         let deliverables = [];
         let offset = 0;
@@ -97,7 +96,7 @@ export abstract class Roadmap {
 
         Promise.all(deliverablePromises).then((responses)=>{
             if(!completedQuery) {
-                return msg.channel.send(`Roadmap retrieval timed out; please try again later.`).catch(console.error);
+                return channel.send(`Roadmap retrieval timed out; please try again later.`);
             }
 
             responses.forEach((response)=>{
@@ -113,7 +112,7 @@ export abstract class Roadmap {
 
             Promise.all(teamPromises).then(async (responses) => {
                 if(!completedQuery) {
-                    return msg.channel.send(`Roadmap team retrieval timed out; please try again later.`).catch(console.error);
+                    return channel.send(`Roadmap team retrieval timed out; please try again later.`);
                 }
 
                 const disciplinePromises = []; // get dev lists for each team/deliverable combination
@@ -128,7 +127,7 @@ export abstract class Roadmap {
 
                 Promise.all(disciplinePromises).then(async (disciplineResults) => {
                     if(!completedQuery) {
-                        return msg.channel.send(`Roadmap discipline retrieval timed out; please try again later.`).catch(console.error);
+                        return channel.send(`Roadmap discipline retrieval timed out; please try again later.`);
                     }
                     disciplineResults.forEach(disciplines => {
                         disciplines.forEach(discipline => {
@@ -150,6 +149,7 @@ export abstract class Roadmap {
                     console.log(`Deliverables: ${deliverables.length} in ${delta} milliseconds`);
 
                     const compareTime = Date.now();
+                    const db = channel.db;
 
                     // populate db with initial values
                     let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
@@ -167,10 +167,10 @@ export abstract class Roadmap {
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
-                        msg.channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
-                            ` Type \`!roadmap compare\` to compare to the last update!`).catch(console.error);
+                        channel.send(`Roadmap retrieval returned ${deliverables.length} deliverables in ${delta} ms.  \n`+
+                            ` Type \`!roadmap compare\` to compare to the last update!`);
                     } else {
-                        msg.channel.send('No changes have been detected since the last pull.').catch(console.error);
+                        channel.send('No changes have been detected since the last pull.');
                     }
                 }).catch(console.error);
             }).catch(console.error);
@@ -411,7 +411,7 @@ export abstract class Roadmap {
                         }
                     }
 
-                    const projectIds = d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); }).toString();
+                    const projectIds = _.uniq(d.projects.map(p => { return p.title === 'Star Citizen' ? 'SC' : (p.title === 'Squadron 42' ? 'SQ42' : null); })).toString();
 
                     let did = null;
                     if(!dMatch || (dMatch && gd.length)) {
@@ -477,15 +477,14 @@ export abstract class Roadmap {
     //#region Generate Progress Tracker Delta Report
     /**
      * Compares deltas between two dates and sends a markdown report document to the Discord channel the command message originated from
-     * @param argv The available arguments
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static async generateProgressTrackerDeltaReport(argv: Array<string>, msg: Message, db: Database) {
+    private static async generateProgressTrackerDeltaReport(channel: MessagingChannel) {
         let start: number = null;
         let end: number = null;
 
-        const args = require('minimist')(argv.slice(1));
+        const args = require('minimist')(channel.args.slice(1));
+        const db = channel.db;
 
         // select closest existing date prior to or on entered date
         if(args['e'] && args['e'] !== true) {
@@ -510,16 +509,16 @@ export abstract class Roadmap {
         }
 
         if(!start || !end || start >= end ) {
-            return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+            return channel.send('Invalid timespan or insufficient data to generate report.');
         }
 
-        msg.channel.send('Calculating differences between roadmaps...').catch(console.error);
+        channel.send('Calculating differences between roadmaps...');
 
         const first = this.buildDeliverables(start, db, true);
         const last = this.buildDeliverables(end, db, true);
         const dbRemovedDeliverables = db.prepare(`SELECT uuid, title FROM deliverable_diff WHERE addedDate <= ${start} AND startDate IS NULL AND endDate IS NULL GROUP BY uuid`).all();
 
-        let messages = [];
+        let messages: string[] = [];
         const compareTime = end;
         let changes = {added: 0, removed: 0, updated: 0, readded: 0};
 
@@ -610,18 +609,16 @@ export abstract class Roadmap {
                 const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
                 if(d.length && l) {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
-                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams', 'card_id'];
 
                     let update = [];
                     if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
                         if(dChanges.some(p => p.change === 'startDate')) {
                             const oldDate = new Date(f.startDate);
-                            const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.startDate);
-                            const newDateText = newDate.toDateString();
 
                             let updateText = "";
-                            if(Date.parse(oldDateText) < compareTime && Date.parse(newDateText) < compareTime) {
+                            if(f.startDate < compareTime && l.startDate < compareTime) {
                                 updateText = "been corrected"; // shift in either direction is most likely a time allocation correction
                             } else if(newDate < oldDate) {
                                 updateText = "moved closer";
@@ -629,16 +626,14 @@ export abstract class Roadmap {
                                 updateText = "been pushed back";
                             }
 
-                            update.push(`\* Start date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
+                            update.push(`\* Start date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.startDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.startDate)}  \n`);
                         }
                         if(dChanges.some(p => p.change === 'endDate')) {
                             const oldDate = new Date(f.endDate);
-                            const oldDateText = oldDate.toDateString();
                             const newDate = new Date(l.endDate);
-                            const newDateText = newDate.toDateString();
 
                             let updateText = "";
-                            if((compareTime < Date.parse(oldDateText) && Date.parse(newDateText) < compareTime) || (compareTime > Date.parse(oldDateText) && newDate < oldDate)) {
+                            if((compareTime < f.endDate && l.endDate < compareTime) || (compareTime > f.endDate && newDate < oldDate)) {
                                 updateText = "moved earlier (time allocation removal(s) or priority up likely)  \n"; // likely team time allocation was removed, but could have finished early
                             } else if(oldDate < newDate) {
                                 updateText = "been extended";
@@ -646,7 +641,7 @@ export abstract class Roadmap {
                                 updateText = "moved closer";
                             }
 
-                            update.push(`\* End date has ${updateText} from ${oldDateText} to ${newDateText}  \n`);
+                            update.push(`\* End date has ${updateText} from ${GeneralHelpers.convertTimeToHyphenatedDate(f.endDate)} to ${GeneralHelpers.convertTimeToHyphenatedDate(l.endDate)}  \n`);
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
@@ -730,7 +725,19 @@ export abstract class Roadmap {
                             }
                         }
 
-                        if(update.length) {
+                        let cardChanges = false;
+                        if(dChanges.some(p => p.change === 'card_id')) {
+                            const d = diff.getDiff(l.card, f.card);
+                            if(d.filter((df) => df.op === 'update').length) {
+                                const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                                const changesToDetect = ['title','description', 'category', 'release_title'];
+                                cardChanges = dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).length > 0;
+                            }  else {
+                                cardChanges = true;
+                            }
+                        }
+
+                        if(update.length || cardChanges) {
                             const deltaHeader = [];
                             const title = f.title === 'Unannounced' ? `${f.title} (${f.description})` : f.title;
                             if(args['publish']) {
@@ -743,7 +750,16 @@ export abstract class Roadmap {
 
                             updatedMessages.push(he.unescape([...deltaHeader, ...update].join('') + '  \n'));
 
-                            if(f.card && !l.card) {
+                            if(!f.card && l.card) {
+                                updatedMessages.push(GeneralHelpers.shortenText(`\* Added to the ${l.card.release_title} release window  \n`));
+                                if(args['publish']) {
+                                    const cardImage = l.card.thumbnail.includes(RSINetwork.rsi) ? l.card.thumbnail : `https://${RSINetwork.rsi}${l.card.thumbnail}`;
+                                    updatedMessages.push(`![](${cardImage})  \n`);
+                                    updatedMessages.push(`<sup>"${l.card.description}"</sup>  \n\n`);
+                                } else {
+                                    updatedMessages.push(`"${l.card.description}"  \n\n`);
+                                }
+                            } else if(f.card && !l.card) {
                                 updatedMessages.push("#### Removed from release roadmap! ####  \n  \n");
                             } else if(l.card) {
                                 updatedMessages = [...updatedMessages, ...this.generateCardImage(l, f, args['publish'])];
@@ -766,7 +782,7 @@ export abstract class Roadmap {
             messages = [...GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(end), this.ReportCategoryEnum.Delta, "Progress Tracker Delta"), ...messages];
         }
 
-        GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, msg);
+        channel.sendTextFile(messages.join(''), `${GeneralHelpers.convertTimeToHyphenatedDate(end)}-Progress-Tracker-Delta.md`, true);
     }
 
     /**
@@ -784,7 +800,8 @@ export abstract class Roadmap {
         const tldr = [];
         tldr.push(`# Progress Tracker Delta #  \n### ${last.length} deliverables listed | ${GeneralHelpers.convertTimeToHyphenatedDate(start)} => ${GeneralHelpers.convertTimeToHyphenatedDate(end)} ###  \n`);
         const readdedText = changes.readded ? ` (with ${changes.readded} returning)` : "";
-        tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update.  \n`));
+        tldr.push(GeneralHelpers.shortenText(`There were ${changes.updated} modifications, ${changes.removed} removals, and ${changes.added} additions${readdedText} in this update. ` +
+            `Please note that not all removals are intentional; there is currently a bug with how time is entered on the Progress Tracker that can cause deliverables to disappear.  \n`));
 
         tldr.push('---  \n\n');
 
@@ -988,12 +1005,11 @@ export abstract class Roadmap {
 
     /**
      * Looks up raw data for a given time period or date [TODO]
-     * @param argv The available arguments
-     * @param msg The command message
-     * @param db The database connection
+     * @param channel The origin channel that triggered the command, also provides additional command arguments and the database connection
      */
-    private static lookup(argv: Array<string>, msg: Message, db: Database) {
-        const args = require('minimist')(argv);
+    private static lookup(channel: MessagingChannel) {
+        const args = require('minimist')(channel.args);
+        const db = channel.db;
         if(args['_'][0] === 'teams') {
             let compareTime = null;
             if(!args['t']) {
@@ -1009,12 +1025,12 @@ export abstract class Roadmap {
                 const deliverables = this.buildDeliverables(compareTime, db, true);
                 const messages = this.generateScheduledDeliverablesReport(compareTime, deliverables, db, args['publish']);
                 if(!messages.length) {
-                    msg.channel.send("Insufficient data to generate report.");
+                    channel.send("Insufficient data to generate report.");
                     return;
                 }
-                GeneralHelpers.sendTextMessageFile(messages, `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, msg);
+                channel.sendTextFile(messages.join(''), `${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)}-Scheduled-Deliverables.md`, true);
             } else {
-                msg.channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
+                channel.send("Invalid date for Sprint Report lookup. Use YYYYMMDD format.");
             }
         }
 
@@ -1090,15 +1106,17 @@ export abstract class Roadmap {
         let deltas = this.getDeliverableDeltaDateList(db);
         let past = deltas[0] > _.uniq(deliverables.map(d => d.addedDate).sort((a,b)=>b-a))[0]; // check if most recent deliverable in list is less recent than the most recent possible deliverable
 
+        let summary = `There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams`;
+
         //#region Preamble
         if(publish) {
-            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables");
+            messages = GeneralHelpers.generateFrontmatter(GeneralHelpers.convertTimeToHyphenatedDate(compareTime), this.ReportCategoryEnum.Teams, "Scheduled Deliverables", summary);
         }
 
         messages.push(`# Scheduled Deliverables #  \n`);
         messages.push(`#### as of ${GeneralHelpers.convertTimeToHyphenatedDate(compareTime)} ####  \n`);
 
-        messages.push(`## There ${past?'were':'are currently'} ${scheduledDeliverables.length} scheduled deliverables being worked on by ${teamTasks.length} teams ##  \n`);
+        messages.push(`## ${summary} ##  \n`);
 
         // TODO list deliverables to start with teams
         messages.push(`### ${newScheduledDeliverables.length} deliverables ${past?'were':'are'} scheduled to begin work by ${futureTeamTasks.length} team(s) within two weeks ###  \n`);
@@ -1333,7 +1351,8 @@ export abstract class Roadmap {
             team.schedules = [...team.schedules, ...futureTeam.schedules.filter(fts => !team.schedules.some(ts => ts.merged && ts.merged.id === fts.merged.id))];
         }
         const allFuture = team.schedules.filter(s => s.merged && s.merged.startDate <= compareTime).length === 0; // all scheduled teams are scheduled in the future
-        team.schedules.forEach(ds => {
+        const filteredSchedules = _._(team.schedules).groupBy(s => s.merged && s.merged.title).map(s => s[0]).value();
+        filteredSchedules.forEach(ds => {
             if(publish) {
                 const time = new Date(compareTime);
                 const firstOfYear = new Date(time.getFullYear(), 0, 1); // 01/01
@@ -1365,7 +1384,7 @@ export abstract class Roadmap {
                         const day = time.getDay();
                         const alteredWeek = (day<5?'|':weekType[0]) + (5<=day?'|':weekType[1]);
                         newWaterfall.splice(thisWeek - 1, 1, alteredWeek);
-                        waterfalls.push(newWaterfall.join(''));
+                        waterfalls.push(newWaterfall.slice(0,52).join(''));
                     }
                 }
             }
@@ -1381,7 +1400,7 @@ export abstract class Roadmap {
 
                     // check for continuing work here
                     if(continuingWork) {
-                        timelines.push(`↳ will continue ${GeneralHelpers.convertTimeToHyphenatedDate(continuingWork.startDate)} with ${continuingWork.merged.numberOfMembers}x ${continuingWork.merged.title} dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
+                        timelines.push(`↳ will continue ${GeneralHelpers.convertTimeToHyphenatedDate(continuingWork.merged.startDate)} with ${continuingWork.merged.numberOfMembers}x dev${continuingWork.merged.numberOfMembers>1?'s':''}${publish?'<br/>':''}\n`);
                     }
                 } else if(!continuingWork) { // list future work
                     timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} will work on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
@@ -1397,15 +1416,15 @@ export abstract class Roadmap {
 
     /**
      * Converts database model(s) to json and exports them
-     * @param argv The argument array (-t YYYYMMDD for specific one or --all for all)
-     * @param msg The command message
-     * @param db The database connection
+     * Arguments: (-t YYYYMMDD for specific one or --all for all)
+     * @param channel The origin channel that triggered the command, also provides additional command arguments  and the database connection
      * @param discord Whether to send the file to discord or to save locally
      */
-    private static async exportJson(argv: any[], msg: Message, db: Database, discord: boolean = false) {
+    private static async exportJson(channel: MessagingChannel, discord: boolean = false) {
         let exportDates: number[] = [];
 
-        const args = require('minimist')(argv.slice(1));
+        const args = require('minimist')(channel.args.slice(1));
+        const db = channel.db;
 
         if(args['all'] === true) {
             exportDates = this.getDeliverableDeltaDateList(db);
@@ -1422,7 +1441,7 @@ export abstract class Roadmap {
             }
 
             if(!exportDates.length) {
-                return msg.channel.send('Invalid timespan or insufficient data to generate report.').catch(console.error);
+                return channel.send('Invalid timespan or insufficient data to generate report.');
             }
         }
 
@@ -1490,16 +1509,265 @@ export abstract class Roadmap {
             const json = JSON.stringify(deliverablesToExport);
 
             if(discord && this.AllowExportSnapshotsToDiscord) {
-                GeneralHelpers.sendTextMessageFile([json], filename, msg, false);
+                channel.sendTextFile(json, filename, false);
             } else {
                 // save to local directory
                 const data_exports = path.join(__dirname, '..', 'data_exports');
                 await fs.mkdir(data_exports, { recursive: true }, (err) => {
                     if (err) throw err;
                   });
-                fs.writeFile(path.join(data_exports, filename), json, () => {msg.channel.send('Export complete.');});
+                fs.writeFile(path.join(data_exports, filename), json, () => {channel.send('Export complete.');});
             }
         });
+    }
+
+    /**
+     * Generates summary reports for the SC subreddit news team
+     * @param channel The origin channel that triggered the command, also provides additional command arguments  and the database connection
+     */
+    private static generateSummary(channel: MessagingChannel) {
+        const db = channel.db;
+
+        const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
+        const end = dbEnd && dbEnd.addedDate;
+        const dbStart = end && db.prepare(`SELECT addedDate FROM deliverable_diff WHERE addedDate < ${end} ORDER BY addedDate DESC LIMIT 1`).get();
+        const start = dbStart && dbStart.addedDate;
+
+        if(!start || !end || start >= end ) {
+            return channel.send('Invalid insufficient data to generate summary.');
+        }
+
+        const first = this.buildDeliverables(start, db, true);
+        const last = this.buildDeliverables(end, db, true);
+        let messages: string[] = [];
+
+        const removedDeliverables = first.filter(f => !last.some(l => l.uuid === f.uuid || (f.title && f.title === l.title && !f.title.includes("Unannounced")))); // :SCN2:
+        if(removedDeliverables.length) {
+            messages.push(`**Deliverables Removed**\n`);
+            removedDeliverables.forEach(d => {
+                const dMatch = first.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced"))); // guaranteed to exist if we know it has been removed
+                let devs = 0;
+                if(dMatch.teams) {
+                    const freedTeams = dMatch.teams.filter(t => t.timeAllocations);
+                    freedTeams.forEach(ft => {
+                        GeneralHelpers.mergeDateRanges(ft.timeAllocations);
+                        const disciplineSchedules = _._(ft.timeAllocations).groupBy('discipline_id').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            const load = this.generateLoad(ds, end, d);
+                            if(load.tasks) {
+                                devs += ds[0].numberOfMembers;
+                            }
+                        });
+                    });
+                }
+                let title = d.title.includes("Unannounced") ? d.description : d.title;
+                let devText = `[${devs} Dev${devs>1?'s':''}] `;
+                messages.push(he.unescape(`:SCN2: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
+            });
+            messages.push(`\n`);
+        }
+
+        const newDeliverables = last.filter(l => !first.some(f => l.uuid === f.uuid || (l.title && l.title === f.title && !l.title.includes("Unannounced")))); // :SCN1:
+        if(newDeliverables.length) {
+            messages.push(`**Deliverables Added**\n`);
+            newDeliverables.forEach(d => {
+                let devs = 0;
+                if(d.teams) {
+                    _.orderBy(d.teams, [t => t.title.toLowerCase()], ['asc']).forEach(t => {
+                        const disciplineSchedules = _._(t.timeAllocations).groupBy('title').map(v=>v).value();
+                        disciplineSchedules.forEach(ds => {
+                            devs += ds[0].numberOfMembers;
+                        });
+                    });
+                    
+                    let title = d.title.includes("Unannounced") ? d.description : d.title;
+                    let devText = `[${devs} Dev${devs>1?'s':''}] `;
+                    messages.push(he.unescape(`:SCN1: ${title.trim()} ${devs?devText:''}${GeneralHelpers.getProjectIcons(d)}\n`.toString()));
+                }
+            });
+            messages.push(`\n`);
+        }
+
+        const remainingDeliverables = first.filter(f => !removedDeliverables.some(r => r.uuid === f.uuid) || !newDeliverables.some(n => n.uuid === f.uuid)); // :SCN4:
+        if(remainingDeliverables.length) {
+            messages.push(`**Deliverables Updated**\n`);
+            remainingDeliverables.forEach(f => {
+                const l = last.find(x => x.uuid === f.uuid || (f.title && x.title === f.title && !f.title.includes("Unannounced")));
+                const d = diff.getDiff(f, l).filter((df) => df.op === 'update');
+                if(d.length && l) {
+                    const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
+                    const dChangesToDetect = ['endDate','startDate', 'title', 'description', 'teams'];
+
+                    let update = [];
+                    if(dChanges.some(p => dChangesToDetect.some(detect => detect.includes(p.change.toString())))) {
+                        if(dChanges.some(p => p.change === 'startDate')) {
+                            const oldDate = new Date(f.startDate);
+                            const newDate = new Date(l.startDate);
+
+                            let updateText = "";
+                            if(f.startDate < end && l.startDate < end) {
+                                updateText = "corrected";
+                            } else if(newDate < oldDate) {
+                                updateText = "retracted";
+                            } else if(oldDate < newDate) {
+                                updateText = "extended";
+                            }
+
+                            update.push(`Start date ${updateText}`);
+                        }
+                        if(dChanges.some(p => p.change === 'endDate')) {
+                            const oldDate = new Date(f.endDate);
+                            const newDate = new Date(l.endDate);
+
+                            let updateText = "";
+                            if((end < f.endDate && l.endDate < end) || (end > f.endDate && newDate < oldDate) || newDate < oldDate) {
+                                updateText = "retracted"; // likely team time allocation was removed, but could have finished early
+                            } else if(oldDate < newDate) {
+                                updateText = "extended";
+                            }
+
+                            update.push(`End date ${updateText}`);
+                        }
+
+                        let netWork = 0;
+                        if(dChanges.some(p => p.change === 'teams')) {
+                            const teamChangesToDetect = ['startDate', 'endDate', 'timeAllocations']; // possible for start and end to remain the same while having shifting time allocations
+                            _.orderBy(l.teams, [t => t.title.toLowerCase()], ['asc']).forEach(lt => { // added/modified
+                                const lDiff = GeneralHelpers.mergeDateRanges(lt.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
+                                const assignedStart = lt.timeAllocations && lt.timeAllocations.length ? _.minBy(lt.timeAllocations, 'startDate').startDate : 0;
+                                const assignedEnd = lt.timeAllocations && lt.timeAllocations.length ? _.maxBy(lt.timeAllocations, 'endDate').endDate : 0;
+                                const teamMatch = f.teams.find(ft => ft.slug === lt.slug);
+                                if(teamMatch) {
+                                    const teamChanges = diff.getDiff(lt, teamMatch).filter((df) => df.op === 'update');
+                                    const tChanges = teamChanges.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val})).filter(tc => teamChangesToDetect.some(td => td.includes(tc.change.toString())));
+
+                                    if(tChanges.length) {
+                                        const tmAssignedStart = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.minBy(teamMatch.timeAllocations, 'startDate').startDate : 0;
+                                        const tmAssignedEnd = teamMatch.timeAllocations && teamMatch.timeAllocations.length ? _.maxBy(teamMatch.timeAllocations, 'endDate').endDate : 0;
+                                        const tmDiff = GeneralHelpers.mergeDateRanges(teamMatch.timeAllocations).map(dr => dr.endDate - dr.startDate).reduce((partialSum, a) => partialSum + a, 0);
+                                        const timeDiff = lDiff - tmDiff; // positive is more work
+                                        const dayDiff = GeneralHelpers.convertMillisecondsToDays(timeDiff);
+                                        const tmDaysRemaining = GeneralHelpers.convertMillisecondsToDays(tmAssignedEnd - (end < tmAssignedStart ? tmAssignedStart : end));
+                                        const extraDays = dayDiff - tmDaysRemaining;
+                                        const displayDays = extraDays < 0 ? dayDiff : tmDaysRemaining;
+
+                                        if(dayDiff) {
+                                            if(tmDiff === 0 && dayDiff > 0) {
+                                                netWork =+ displayDays;
+                                            } else if(displayDays > 0) {
+                                                if(timeDiff > 0) {
+                                                    netWork += displayDays;
+                                                } else {
+                                                    netWork -= displayDays;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    const daysRemaining = GeneralHelpers.convertMillisecondsToDays(assignedEnd - end);
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(lDiff);
+                                    const extraDays = dayDiff - daysRemaining;
+                                    netWork += extraDays < 0 ? dayDiff : extraDays;
+                                }
+                            });
+
+                            // removed teams
+                            if(f.teams) {
+                                const removedTeams = f.teams.filter(f => l.teams && !l.teams.some(l => l.slug === f.slug));
+                                removedTeams.forEach(rt => {
+                                    const rtDiff = rt.endDate - rt.startDate;
+                                    const dayDiff = GeneralHelpers.convertMillisecondsToDays(rtDiff);
+                                    netWork -= dayDiff;
+                                });
+                            }
+                        }
+
+                        if(netWork > 0) {
+                            update.push('Work added');
+                        } else if(netWork < 0) {
+                            update.push('Work removed');
+                        }
+
+                        if(update.length) {
+                            const title = f.title === 'Unannounced' ? f.description : f.title;
+                            update = _.uniq(update);
+                            messages.push(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`);
+                        }
+                    }
+                }
+            });
+            messages.push(`\n`);
+        }
+
+        messages.push("**Ongoing Sprints**\n");
+        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+        const teams = _.uniqBy(last.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${end} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${last.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const previouslyScheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${start} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${first.map(l => l.id).toString()}) GROUP BY uuid`).all();
+
+        // Consolidate discipline schedules
+        const currentTasks = scheduledTasks.filter(st => st.startDate <= end); // tasks that encompass the comparison time
+        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack);
+        const scheduledDeliverables = last.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
+        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= end + lookForwardOrBack); // tasks that begin within the next two weeks
+        const futureDisciplineSchedules = this.getDisciplineSchedules(last, futureTasks, end, lookForwardOrBack, true);
+
+        const previousCompare = start;
+        const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= previousCompare); // tasks that encompass the comparison time
+        const previousDisciplineSchedules = this.getDisciplineSchedules(first, previousTasks, previousCompare, lookForwardOrBack);
+        const previousDeliverables = first.filter(d => previousDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
+        const previousFutureTasks = previouslyScheduledTasks.filter(ft => !previousTasks.some(st => st.id === ft.id ) && ft.startDate <= previousCompare + lookForwardOrBack); // tasks that begin within the next two weeks
+        const previousFutureDisciplineSchedules = this.getDisciplineSchedules(first, previousFutureTasks, previousCompare, lookForwardOrBack, true);
+
+        scheduledDeliverables.forEach(d => {
+            const dMatch = previousDeliverables.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced")));
+            let matchDevs = 0;
+            if(dMatch && dMatch.teams) {
+                const schedule = previousDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
+                const futureSchedule = previousFutureDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
+                if(futureSchedule) {
+                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
+                    schedule.teams = [...schedule.teams, ...futureTeams];
+                }
+                schedule.teams.forEach((mt, i) => {
+                    let wf = this.generateWaterfallChart(mt, previousCompare, futureSchedule, false);
+                    
+                    wf.split('\n').forEach(s => {
+                        if(s.startsWith(' -')) {
+                            matchDevs += +s.split('- ')[1].split('x')[0];
+                        }
+                    });
+                });
+            }
+            let devs = 0;
+            if(d.teams) {
+                const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+                const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
+                if(futureSchedule) {
+                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
+                    schedule.teams = [...schedule.teams, ...futureTeams];
+                }
+                schedule.teams.forEach((mt, i) => {
+                    this.generateWaterfallChart(mt, start, futureSchedule, false).split('\n').forEach(s => {
+                        if(s.startsWith(' -')) {
+                            devs += +s.split('- ')[1].split('x')[0];
+                        }
+                    });
+                });
+            }
+
+            let title = d.title.includes("Unannounced") ? d.description : d.title;
+            let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
+            let devText = `[${devs} Active Dev${devs>1?'s':''}:${devState}:] `;
+            messages.push(he.unescape(`:SCN5: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
+        });
+
+        const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
+        const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
+        const report = messages.join('');
+        const strippedReport = report.replace(/:[^:]+: /g, '');
+        channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
+        channel.sendTextFile(reportHeader + strippedReport, `${filename}_-_Removed.txt`, true);
     }
 
     //#region Helper methods
