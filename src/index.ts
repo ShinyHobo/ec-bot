@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
 import Database from 'better-sqlite3';
-import { Client, Intents, Collection, ThreadChannel, Message } from 'discord.js';
-import * as botCommands from './commands/index';
 import Migration from './migration';
+import DiscordChannel from './channels/discord-channel';
+import ConsoleChannel from './channels/console-channel';
+import MessagingChannel from './channels/messaging-channel';
 
 dotenv.config();
 
@@ -19,45 +20,17 @@ process.on('SIGINT', () => {
   } catch(ex) {}
 });
 
-// Set up bot
-const bot = new Client({ intents: [Intents.FLAGS.DIRECT_MESSAGES, Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES], partials: ["CHANNEL"] });
-// Set up bot commands
-let commands = new Collection();
+evaluateCommandlineArgs();
 
-Object.keys(botCommands).map(key => {
-  commands.set(botCommands[key][key].command, botCommands[key][key]);
-});
 
-bot.login(process.env.TOKEN);
+function evaluateCommandlineArgs() {
+    const args = process.argv.slice(2);
 
-bot.on('ready', () => {
-  console.info(`Logged in as ${bot.user.tag}!`);
-  bot.user.setPresence({ status: 'online', activities: [{ name: 'with my sourcecode', type: 'PLAYING', url: 'https://github.com/ShinyHobo/ec-bot'}]});
-  // Unarchive archived threads
-  botCommands.Renew.Renew.unarchiveAll(bot, db);
-});
-
-// Watch the message history for commands
-bot.on('messageCreate', (msg: Message) => {
-  if(msg.author.bot) {
-    return;
-  }
-
-  let args = msg.content.split(/ +/);
-  let command: any = args.shift().toLowerCase();
-  //console.info(`Called command: ${command}`);
-
-  if (!commands.has(command)) return;
-
-  try {
-    command = commands.get(command);
-    command.execute(msg, args, db);
-  } catch (error) {
-    console.error(error);
-    msg.channel.send('There was an error trying to execute that command!').catch(console.error);
-  }
-});
-
-bot.on('threadUpdate', (oldThread: ThreadChannel, newThread: ThreadChannel) => {
-  botCommands.Renew.Renew.unarchive(newThread, db);
-});
+    let channel: MessagingChannel;
+    if (args.length == 0) {
+        channel = new DiscordChannel(db); // start discord bot, uses the args that will come from the user discord message
+    } else {
+        channel = new ConsoleChannel(db, args); // use cli, uses the args from the command line
+    }
+    channel.run();
+}
