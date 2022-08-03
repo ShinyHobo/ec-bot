@@ -149,10 +149,11 @@ export default abstract class GeneralHelpers {
      * @returns The YAML frontmatter
      */
     public static generateFrontmatter(date: string, category: string, title: string, excerpt: string = null): string[] {
-        let frontmatter = ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`,'---  \n  \n'];
+        let frontmatter = ['---  \n','layout: post  \n',`title: "${title} - ${date}"  \n`,`date: ${date}  \n`,`categories: ${category}  \n`];
         if(excerpt) {
             frontmatter.push(`excerpt: "${excerpt}"  \n`);
         }
+        frontmatter.push('---  \n  \n');
         return frontmatter;
     }
 
