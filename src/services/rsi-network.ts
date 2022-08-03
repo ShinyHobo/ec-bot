@@ -67,10 +67,12 @@ export default abstract class RSINetwork {
      * Gets data from RSI
      * @param data The graphql query
      * @param type The grpahql query type
+     * @param delay The number of milliseconds to delay the call by
+     * @param retry The number of retries that have been attempted
      * @returns The response promise
      */
-    public static async getResponse(data: string, type: number, delay: number = 0): Promise<any> {
-        //delay = 3.5 * delay; // rate limit the response further; 70ms prevents all timeouts I tested with, but takes 2 minutes to complete query
+    public static async getResponse(data: string, type: number, delay: number = 0, retry: number = 0): Promise<any> {
+        //delay = 10 * delay; // rate limit the response further; 70ms prevents all timeouts I tested with, but takes 2 minutes to complete query
         return await new Promise(async (resolve, reject) => { // TODO - Refactor code to require only a singe variable
             await new Promise(res => setTimeout(res, delay));
             const req = https.request(this.options, (res) => {
@@ -105,13 +107,22 @@ export default abstract class RSINetwork {
               });
             });
 
-            req.on('error', (error) => {
-              reject(error);
+            req.on('error', async (error) => {
+                req.destroy();
+                if(retry < 5) {
+                    resolve(await this.getResponse(data, type, delay, retry++));
+                } else {
+                    reject(error);
+                }
             });
 
-            req.on('timeout', () => {
+            req.on('timeout', async () => {
                 req.destroy();
-                reject('timed out');
+                if(retry < 5) {
+                    resolve(await this.getResponse(data, type, delay, retry++));
+                } else {
+                    reject('timed out');
+                }
             });
 
             req.write(data);
