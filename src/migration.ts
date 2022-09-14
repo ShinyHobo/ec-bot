@@ -93,7 +93,7 @@ export default abstract class Migration {
             }
 
             // Remove duplicate entries, keeping lowest index
-            db.prepare("DELETE FROM timeAllocation_diff WHERE id NOT IN (SELECT min(id) FROM timeAllocation_diff GROUP BY startDate, endDate, uuid, partialTime, team_id, deliverable_id, discipline_id)").run();
+            //db.prepare("DELETE FROM timeAllocation_diff WHERE id NOT IN (SELECT min(id) FROM timeAllocation_diff GROUP BY startDate, endDate, uuid, partialTime, team_id, deliverable_id, discipline_id)").run();
         });
 
         migrate();
