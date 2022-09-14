@@ -91,8 +91,14 @@ export default abstract class Migration {
             if(!disciplineIdExists) {
                 db.prepare("ALTER TABLE timeAllocation_diff ADD COLUMN discipline_id INTEGER").run();
             }
+
+            // Remove duplicate entries, keeping lowest index
+            db.prepare("DELETE FROM timeAllocation_diff WHERE id NOT IN (SELECT min(id) FROM timeAllocation_diff GROUP BY startDate, endDate, uuid, partialTime, team_id, deliverable_id, discipline_id)").run();
         });
 
         migrate();
+        
+        // Cleans up the database by creating a temp copy and replacing
+        //db.prepare("VACUUM").run();
     }
 }

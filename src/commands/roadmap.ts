@@ -236,8 +236,8 @@ export abstract class Roadmap {
         const deliverableInsert = db.prepare("INSERT INTO deliverable_diff (uuid, slug, title, description, addedDate, numberOfDisciplines, numberOfTeams, totalCount, card_id, project_ids, startDate, endDate, updateDate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
         const cardsInsert = db.prepare("INSERT INTO card_diff (tid, title, description, category, release_id, release_title, updateDate, addedDate, thumbnail) VALUES (?,?,?,?,?,?,?,?,?)");
         const teamsInsert = db.prepare("INSERT INTO team_diff (abbreviation, title, description, startDate, endDate, addedDate, numberOfDeliverables, slug) VALUES (?,?,?,?,?,?,?,?)");
-        const deliverableTeamsInsert = db.prepare("INSERT or IGNORE INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
-        const timeAllocationInsert = db.prepare("INSERT INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id, discipline_id) VALUES (?,?,?,?,?,?,?,?)");
+        const deliverableTeamsInsert = db.prepare("INSERT OR IGNORE INTO deliverable_teams (deliverable_id, team_id) VALUES (?,?)");
+        const timeAllocationInsert = db.prepare("INSERT OR IGNORE INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id, discipline_id) VALUES (?,?,?,?,?,?,?,?)");
         const disciplinesInsert = db.prepare("INSERT INTO discipline_diff (numberOfMembers, title, uuid, addedDate) VALUES (?,?,?,?)");
 
         // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
@@ -267,6 +267,7 @@ export abstract class Roadmap {
             const rAddedTeams = [];
             if(teams) {
                 const disciplineProperties = ['numberOfMembers', 'title', 'disciplineUuid'];
+                const timeAllocationProperties = ['startDate', 'endDate', 'uuid', 'partialTime'];
                 teams.forEach((dt) => {
                     const match = dbTeams.sort((a,b) => b.addedDate - a.addedDate).find(t => t.slug === dt.slug);
                     const tDiff = diff.getDiff(match, dt).filter((df) => df.op === 'update');
@@ -305,14 +306,15 @@ export abstract class Roadmap {
                             }
 
                             const taMatch = dbTimeAllocations.sort((a,b) => b.addedDate - a.addedDate).find(t => t.uuid === ta.uuid);
+                            taMatch.partialTime = taMatch.partialTime ? true : false;
                             const taDiff = diff.getDiff(taMatch, ta);
-                            //const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
+                            const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
 
-                            if(!taMatch || taDiff.length) {
+                            if(!taMatch || taChanges.some(tad => timeAllocationProperties.includes(tad.change && tad.change.toString()))) {
                                 dbTimeAllocations.push({team_id: teamId, discipline_id: disciplineId, addedDate: now, ...ta});
                                 rTimes.push({team_id: teamId, discipline_id: disciplineId, ...ta});
                             } else {
-                                rTimes.push({team_id: teamId, discipline_id: disciplineId, ...taMatch});
+                                rTimes.push({nochange: true, team_id: teamId, discipline_id: disciplineId, ...taMatch});
                             }
                         });
                     }
@@ -437,7 +439,9 @@ export abstract class Roadmap {
                     });
 
                     timeAllocations.forEach((ta) => {
-                        timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did, ta.discipline_id]);
+                        if(!ta.nochange) {
+                            timeAllocationInsert.run([ta.startDate, ta.endDate, now, ta.uuid, ta.partialTime?1:0, ta.team_id, did, ta.discipline_id]);
+                        }
                     });
                 }
             });
