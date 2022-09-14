@@ -240,9 +240,6 @@ export abstract class Roadmap {
         const timeAllocationInsert = db.prepare("INSERT OR IGNORE INTO timeAllocation_diff (startDate, endDate, addedDate, uuid, partialTime, team_id, deliverable_id, discipline_id) VALUES (?,?,?,?,?,?,?,?)");
         const disciplinesInsert = db.prepare("INSERT INTO discipline_diff (numberOfMembers, title, uuid, addedDate) VALUES (?,?,?,?)");
 
-        // Returns a COUNT(*) value
-        const timeAllocationDuplicateCheck = db.prepare("SELECT COUNT(*) FROM timeAllocation_diff WHERE startDate=? AND endDate=? AND uuid=? AND partialTime=? AND team_id=? AND deliverable_id=? AND discipline_id=?");
-
         // filter out deliverables that had their uuids changed, except for unnanounced content (we don't know if one content is the same as another if their uuid changes)
         let dbDeliverables = db.prepare("SELECT *, MAX(addedDate) FROM deliverable_diff GROUP BY uuid ORDER BY addedDate DESC").all();
         const announcedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
