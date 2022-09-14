@@ -306,7 +306,9 @@ export abstract class Roadmap {
                             }
 
                             const taMatch = dbTimeAllocations.sort((a,b) => b.addedDate - a.addedDate).find(t => t.uuid === ta.uuid);
-                            taMatch.partialTime = taMatch.partialTime ? true : false;
+                            if(taMatch) {
+                                taMatch.partialTime = taMatch.partialTime ? true : false;
+                            }
                             const taDiff = diff.getDiff(taMatch, ta);
                             const taChanges = taDiff.map(x => ({change: x.path && x.path[0], val: x.val}));
 
