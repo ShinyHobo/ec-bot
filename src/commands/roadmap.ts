@@ -1780,16 +1780,18 @@ export abstract class Roadmap {
                 });
             }
 
-            let title = d.title.includes("Unannounced") ? d.description : d.title;
-            let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
-            let devText = `[${devs} Active Dev${devs>1?'s':''}:${devState}:] `;
-            messages.push(he.unescape(`:SCN5: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
+            if(devs && matchDevs) {
+                let title = d.title.includes("Unannounced") ? d.description : d.title;
+                let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
+                let devText = `[${devs} Active Dev${devs>1||devs==0?'s':''}:${devState}:] `;
+                messages.push(he.unescape(`:SCN5: ${title.trim()} ${devText}${GeneralHelpers.getProjectIcons(d)}\n`));
+            }
         });
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
         const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
         const report = messages.join('');
-        const strippedReport = report.replace(/:[^:]+: /g, '');
+        const strippedReport = report.replace(/:SCN[^:]+: /g, '');
 
         // Replace report text with translation
         // For English, provide a report without Discord icons
@@ -1800,9 +1802,9 @@ export abstract class Roadmap {
                 Object.entries(translations).forEach(([en, tr])  => {
                     reportContents = reportContents.replace(new RegExp(en, 'g'), tr.toString());
                 });
-                reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
-                reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
-                reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
+                //reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
+                //reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
+                //reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
             }
             return channel.sendTextFile(reportContents, `${filename}_-_${secondArg}.txt`, true);
         }
