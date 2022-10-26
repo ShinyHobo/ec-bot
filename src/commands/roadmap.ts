@@ -1791,24 +1791,28 @@ export abstract class Roadmap {
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
         const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
         const report = messages.join('');
-        const strippedReport = report.replace(/:SCN[^:]+: /g, '');
+        let reportContents = reportHeader + report;
 
         // Replace report text with translation
         // For English, provide a report without Discord icons
         if(translationFile || secondArg == 'en') {
-            let reportContents = reportHeader + strippedReport;
             if(translationFile) {
                 const translations = JSON.parse(fs.readFileSync(translationFile, 'utf-8'));
                 Object.entries(translations).forEach(([en, tr])  => {
                     reportContents = reportContents.replace(new RegExp(en, 'g'), tr.toString());
                 });
-                //reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
-                //reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
-                //reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
             }
-            return channel.sendTextFile(reportContents, `${filename}_-_${secondArg}.txt`, true);
         }
-        channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
+
+        // Remove emojis
+        if(channel.args[2] == 'false') {
+            reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
+            reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
+            reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
+            reportContents = reportContents.replace(/:SCN[^:]+: /g, '');
+        }
+
+        channel.sendTextFile(reportContents, `${filename}${secondArg?'_-_'+secondArg:''}.txt`, true);
     }
 
     //#region Helper methods
