@@ -1780,7 +1780,7 @@ export abstract class Roadmap {
                 });
             }
 
-            if(devs && matchDevs) {
+            if(devs) {
                 let title = d.title.includes("Unannounced") ? d.description : d.title;
                 let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
                 let devText = `[${devs} Active Dev${devs>1||devs==0?'s':''}:${devState}:] `;
