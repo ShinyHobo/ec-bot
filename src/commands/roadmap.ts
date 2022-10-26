@@ -154,7 +154,6 @@ export abstract class Roadmap {
                     // populate db with initial values
                     let deliverableDeltas = db.prepare("SELECT COUNT(*) as count FROM deliverable_diff").get();
                     if(!deliverableDeltas.count) {
-
                         const initializationDataDir = path.join(__dirname, '..', 'initialization_data');
                         fs.readdirSync(initializationDataDir).forEach((file) => {
                             const data = JSON.parse(fs.readFileSync(path.join(initializationDataDir, file), 'utf-8'));
@@ -1532,6 +1531,25 @@ export abstract class Roadmap {
      * @param channel The origin channel that triggered the command, also provides additional command arguments  and the database connection
      */
     private static generateSummary(channel: MessagingChannel) {
+        const secondArg = channel.args[1];
+        let translationFile = null;
+        // List possible translations
+        if(secondArg == 'help') {
+            const translationDir = path.join(__dirname, '..', 'translations');
+            let translationFiles = fs.readdirSync(translationDir).map(f => f.replace('.json', '')).join(', ');
+            return channel.send(`Available translations: en (default), ${translationFiles}`);
+        } else if(secondArg == 'en') {
+            // do nothing, English is default
+        } else if(secondArg) {
+            const translationDir = path.join(__dirname, '..', 'translations');
+            const validTranslation = fs.readdirSync(translationDir).find(f => f == `${secondArg}.json`);
+            if(validTranslation) {
+                translationFile = path.join(translationDir, validTranslation);
+            } else {
+                return channel.send('Invalid translation request. Please use `!roadmap summary help` for a list of available translations.');
+            }
+        }
+
         const db = channel.db;
 
         const dbEnd = db.prepare("SELECT addedDate FROM deliverable_diff ORDER BY addedDate DESC LIMIT 1").get();
@@ -1772,8 +1790,23 @@ export abstract class Roadmap {
         const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
         const report = messages.join('');
         const strippedReport = report.replace(/:[^:]+: /g, '');
+
+        // Replace report text with translation
+        // For English, provide a report without Discord icons
+        if(translationFile || secondArg == 'en') {
+            let reportContents = reportHeader + strippedReport;
+            if(translationFile) {
+                const translations = JSON.parse(fs.readFileSync(translationFile, 'utf-8'));
+                Object.entries(translations).forEach(([en, tr])  => {
+                    reportContents = reportContents.replace(new RegExp(en, 'g'), tr.toString());
+                });
+                reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
+                reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
+                reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
+            }
+            return channel.sendTextFile(reportContents, `${filename}_-_${secondArg}.txt`, true);
+        }
         channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
-        channel.sendTextFile(reportHeader + strippedReport, `${filename}_-_Removed.txt`, true);
     }
 
     //#region Helper methods
