@@ -991,7 +991,11 @@ export abstract class Roadmap {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
                     const changesToDetect = ['title','description', 'category', 'release_title'];
                     dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
-                        messages.push(GeneralHelpers.shortenText(`* Release ${_.capitalize(dc.change)} has been changed from  \n'${oldDeliverable.card[dc.change]}'  \nto '${deliverable.card[dc.change]}'  \n`));
+                        let changeTitle = dc.change;
+                        if(dc.change == 'release_title') {
+                            changeTitle = "version";
+                        }
+                        messages.push(GeneralHelpers.shortenText(`* Release ${_.capitalize(changeTitle)} has been changed from  \n'${oldDeliverable.card[dc.change]}'  \nto '${deliverable.card[dc.change]}'  \n`));
                     });
                 }
             }
