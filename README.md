@@ -7,6 +7,8 @@ Discord bot for Enemy Contact
 - `!roadmap pull` - Pulls down current state of roadmap and stores the delta
 - `!roadmap compare [-s YYYYMMDD -e YYYYMMDD] [--publish]` - Compares the most recent pull to the previous; use optional start (s) and end (e) arguments to compare alternate date sets
 - `!roadmap teams [--publish]` - Generates a report of currently assigned deliverables
+- `!roadmap summary [en/ru/fr/etc]` - Generates a summary of the delta and two week forecast in your chosen language (English defaults)
+- `!roadmap export` - Exports the most recent version of the pulled Progress Tracker data as a .json file (for generating initialization data)
 - `!verify [RSI USERNAME]` - Attempts to verify that Discord account owns RSI user. (Not available for the CLI)
 - `!renew [on/off]` - Turns thread auto renewal on/off. (Not available for the CLI)
 
