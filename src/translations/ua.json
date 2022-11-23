@@ -125,6 +125,7 @@
     "Hacking T0": "Хакінг T0",
     "Healing T0 / Actor Status T1": "Зцілення T0 / Статус персонажа T1",
     "Hospital Surgeon": "Лікарняний Хірург",
+    "https://robertsspaceindustries.com/roadmap/progress-tracker": "https://robertsspaceindustries.com/roadmap/progress-tracker",
     "Hybrid Service": "Гібридна Служба",
     "Improved OC Workflow": "Покращений процес роботи Контейнерів Об'єктів",
     "Incendiary Ammunition": "Запалювальні Снаряди",
@@ -158,6 +159,8 @@
     "Military Multi-Tool": "Військовий Мультитул",
     "Miscellaneous Support": "Різна Підтримка",
     "Mission Manager App": "Додаток \"Менеджер Місій\"",
+	"microTech Lagrange Points": "Точки Лагранжа у microTech",
+    "mobiGlas Rework": "Переробка mobiGlas",
     "Modular Shaders": "Модульні Шейдери",
     "Move Planet to Compute": "Перенесення Планет на Обчислювальний Шейдер",
     "NPC Scheduler Service": "Планувальник NPC",
@@ -260,8 +263,5 @@
     "XenoThreat Armor": "Броня XenoThreat",
     "XenoThreat Armour": "Броня XenoThreat",
     "Zero G Push & Pull": "Тяни-Штовхай в Невагомості",
-    "Zone Handling": "Оброблення Зон",
-    "https://robertsspaceindustries.com/roadmap/progress-tracker": "https://robertsspaceindustries.com/roadmap/progress-tracker",
-    "microTech Lagrange Points": "Точки Лагранжа у microTech",
-    "mobiGlas Rework": "Переробка mobiGlas",
+    "Zone Handling": "Оброблення Зон"
 }
