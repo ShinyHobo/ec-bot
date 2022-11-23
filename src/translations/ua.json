@@ -1,14 +1,18 @@
 {
 	"<https://robertsspaceindustries.com/roadmap/progress-tracker>": "<https://robertsspaceindustries.com/roadmap/progress-tracker>",
-    "<https://shinytracker.app/>": "<https://shinytracker.app/>",
 	"AI - Vehicle Perception": "ШІ - Сприйняття Транспорту",
 	"Aerodynamic Control Surfaces": "Аеродинамічні Керуючі Елементи",
 	"Asteroid Facilities": "Астероїдні Комплекси",
 	"Cutting T2": "Різання T2",
 	"Environmental Space Missions": "Місії в Космічному Просторі",
+	"Freight Elevators": "Вантажні ліфти",
 	"New Interdiction Scenarios": "Нові сценарії Прехоплення",
+	"New Missions - Orison": "Нові місії - Орісон",
+	"Player/Machine Physical Interaction": "Фізична Взаємодія Гравця і Машини",
 	"Security Network V1": "Мережа Безпеки V1",
 	"Time Trial Race Missions": "Перегони На Час",
+	"Unified Itemports": "Уніфіковані Айтемпорти"
+    "<https://shinytracker.app/>": "<https://shinytracker.app/>",
     "AI - Arcade Machine": "ШІ - Аркадний Автомат",
     "AI - Landing Improvements": "ШІ - Вдосконалення Приземлення",
     "AI - Navigation Links - Ladders / Ledge Grab": "ШІ - Навігаційні Мітки - Хапання за Драбини/Виступи",
@@ -267,8 +271,4 @@
     "https://robertsspaceindustries.com/roadmap/progress-tracker": "https://robertsspaceindustries.com/roadmap/progress-tracker",
     "microTech Lagrange Points": "Точки Лагранжа у microTech",
     "mobiGlas Rework": "Переробка mobiGlas",
-	"Freight Elevators": "Вантажні ліфти",
-	"New Missions - Orison": "Нові місії - Орісон",
-	"Player/Machine Physical Interaction": "Фізична Взаємодія Гравця і Машини",
-	"Unified Itemports": "Уніфіковані Айтемпорти"
 }
