@@ -650,10 +650,18 @@ export abstract class Roadmap {
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
-                            update.push(GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`));
+                            var firstTitle = he.unescape(f.title);
+                            var lastTitle = he.unescape(l.title);
+                            if(firstTitle !== lastTitle) {
+                                update.push(GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`));
+                            }
                         }
                         if(dChanges.some(p => p.change === 'description')) {
-                            update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
+                            var firstDescription = he.unescape(f.description);
+                            var lastDescription = he.unescape(l.description);
+                            if(firstDescription !== lastDescription) {
+                                update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
+                            }
                         }
 
                         if(dChanges.some(p => p.change === 'teams')) {
