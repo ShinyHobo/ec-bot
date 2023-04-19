@@ -1727,7 +1727,7 @@ export abstract class Roadmap {
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? f.description : f.title;
                             update = _.uniq(update);
-                            messages.push(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`);
+                            messages.push(he.unescape(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`));
                         }
                     }
                 }
