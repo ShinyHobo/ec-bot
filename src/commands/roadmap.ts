@@ -1888,7 +1888,7 @@ export abstract class Roadmap {
      */
     private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
         let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
-        const deduplicatedAnnouncedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        const deduplicatedAnnouncedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map(d => d[d.length-1]).value();
         const deduplicatedUnannouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
         dbDeliverables = [...deduplicatedAnnouncedDeliverables, ...deduplicatedUnannouncedDeliverables];
         let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
