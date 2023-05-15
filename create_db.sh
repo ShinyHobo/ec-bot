@@ -12,8 +12,12 @@ suffixLength=3
 rm -f "$outdir/db.sqlite3"*
 split "$indb" --bytes=$serverChunkSize "$outdir/db.sqlite3." --suffix-length=$suffixLength --numeric-suffixes
 
+today="$(date +'%Y-%m-%d')"
+
 # set request chunk size to match page size
 requestChunkSize="$(sqlite3 "$indb" 'pragma page_size')"
+# multiply to reduce network calls
+requestChunkSize=$((requestChunkSize*16))
 
 # write a json config
 echo '
@@ -23,6 +27,7 @@ echo '
     "databaseLengthBytes": '$bytes',
     "serverChunkSize": '$serverChunkSize',
     "urlPrefix": "db.sqlite3.",
-    "suffixLength": '$suffixLength'
+    "suffixLength": '$suffixLength',
+	"cacheBust": '\"$today\"'
 }
 ' > "$outdir/config.json"
