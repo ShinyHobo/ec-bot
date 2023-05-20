@@ -7,7 +7,7 @@ outdir="$2"
 # for chunked mode, we need to know the database size in bytes beforehand
 bytes="$(stat --printf="%s" "$indb")"
 # set chunk size to 10MiB (needs to be a multiple of the `pragma page_size`!)
-serverChunkSize=$((2 * 1024 * 4096))
+serverChunkSize=$((1024 * 16384))
 suffixLength=3
 rm -f "$outdir/db.sqlite3"*
 split "$indb" --bytes=$serverChunkSize "$outdir/db.sqlite3." --suffix-length=$suffixLength --numeric-suffixes
@@ -16,8 +16,6 @@ today="$(date +'%Y-%m-%d')"
 
 # set request chunk size to match page size
 requestChunkSize="$(sqlite3 "$indb" 'pragma page_size')"
-# multiply to reduce network calls
-requestChunkSize=$((requestChunkSize*16))
 
 # write a json config
 echo '
