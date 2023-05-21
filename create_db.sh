@@ -7,7 +7,7 @@ outdir="$2"
 # for chunked mode, we need to know the database size in bytes beforehand
 bytes="$(stat --printf="%s" "$indb")"
 # set chunk size to 10MiB (needs to be a multiple of the `pragma page_size`!)
-serverChunkSize=$((1024 * 16384))
+serverChunkSize=$((4096 * 8192))
 suffixLength=3
 rm -f "$outdir/db.sqlite3"*
 split "$indb" --bytes=$serverChunkSize "$outdir/db.sqlite3." --suffix-length=$suffixLength --numeric-suffixes
