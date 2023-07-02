@@ -15,6 +15,8 @@ export default abstract class Migration {
                 db.prepare("DROP TABLE IF EXISTS card_diff").run();
                 db.prepare("DROP TABLE IF EXISTS timeAllocation_diff").run();
                 db.prepare("DROP TABLE IF EXISTS discipline_diff").run();
+                db.prepare("DROP TABLE IF EXISTS in_progress_deliverables_cache").run();
+                db.prepare("DROP TABLE IF EXISTS sample_date_deliverables_cache").run();
             }
 
             // add json data format as tables
@@ -94,6 +96,12 @@ export default abstract class Migration {
 
             // Remove duplicate entries, keeping lowest index
             //db.prepare("DELETE FROM timeAllocation_diff WHERE id NOT IN (SELECT min(id) FROM timeAllocation_diff GROUP BY startDate, endDate, uuid, partialTime, team_id, deliverable_id, discipline_id)").run();
+
+            // add table for precalculated deliverables that would be scheduled within 2 weeks of the sample date
+            db.prepare("CREATE TABLE IF NOT EXISTS in_progress_deliverables_cache (sampleDate INTEGER NOT NULL UNIQUE, deliverable_ids TEXT, PRIMARY KEY(sampleDate))").run();
+
+            // add table for precalculated deliverables that show up on the sample date
+            db.prepare("CREATE TABLE IF NOT EXISTS sample_date_deliverables_cache (sampleDate INTEGER NOT NULL UNIQUE, deliverable_ids TEXT, PRIMARY KEY(sampleDate))").run();
         });
 
         migrate();

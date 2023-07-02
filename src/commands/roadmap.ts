@@ -66,6 +66,9 @@ export abstract class Roadmap {
             case 'summary': // generates reports for use by the SC subreddit news team
                 this.generateSummary(channel);
                 break;
+            case 'cache': // caches the deliverables ids for each sample date
+                this.cacheDeliverableIds(channel.db);
+                break;
             default:
                 channel.send(this.usage);
                 break;
@@ -163,6 +166,7 @@ export abstract class Roadmap {
 
                     const newDeliverables = this.adjustData(deliverables);
                     const changes = this.insertChanges(db, compareTime, newDeliverables);
+                    this.cacheDeliverableIds(db);
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
@@ -476,6 +480,108 @@ export abstract class Roadmap {
         });
 
         return insertDeliverables(deliverables);
+    }
+
+    /**
+     * Caches the deliverables ids for each sample date for faster lookup
+     * @param db The database connection
+     */
+    private static cacheDeliverableIds(db: Database) {
+        console.log(`Beginning caching process`);
+        const sampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(addedDate) FROM (SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC)").get();
+        const sampleDates = sampleDatesQuery['GROUP_CONCAT(addedDate)']?.split(",") ?? [];
+        const inProgressSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM in_progress_deliverables_cache").get();
+        const inProgressSampleDates = inProgressSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+        const cachedSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM sample_date_deliverables_cache").get();
+        const cachedSampleDates = cachedSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+        const inProgressCacheInsert = db.prepare("INSERT INTO in_progress_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+        const sampleDateCacheInsert = db.prepare("INSERT INTO sample_date_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+
+        const insertRows = db.transaction(() => {
+            sampleDates.forEach((sd) => {
+                const hasInProgressCache = inProgressSampleDates.includes(sd);
+                const hasSampleDateCache = cachedSampleDates.includes(sd);
+
+                // already cached completely
+                if(hasInProgressCache && hasSampleDateCache) {
+                    return;
+                }
+
+                const deliverablesForSampleDate = this.getUniqueDeliverables(db, sd);
+                const deliverableIds = deliverablesForSampleDate.map(d => d.id);
+
+                // cache in progress deliverable ids
+                if(!hasInProgressCache) {
+                    const inProgressIds = this.getInProgressDeliverables(db, sd, deliverablesForSampleDate);
+                    inProgressCacheInsert.run([sd, inProgressIds.join(",")]);
+                }
+
+                // cache sample date deliverable ids
+                if(!hasSampleDateCache) {
+                    sampleDateCacheInsert.run([sd, deliverableIds.join(",")])
+                }
+            });
+        });
+        insertRows();
+        console.log(`Caching process complete!`);
+    }
+
+    /**
+     * Retrieves the list of unique deliverables for the given timestamp (optimized)
+     * @param db The database connection
+     * @param addedDate The delta datetime to lookup
+     * @returns The list of unique, listed deliverables on the progress tracker
+     */
+    private static getUniqueDeliverables(db: Database, addedDate: string) {
+        // Get all deliverables, grouping by uuid and ordering by add date, to get the most recent additions only
+        const dbDeliverableIds = (db.prepare(`SELECT id, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${addedDate} 
+            GROUP BY uuid ORDER BY addedDate ASC`).all()).map(d => d.id);
+
+        let dbDeliverables = db.prepare(`SELECT * FROM deliverable_diff WHERE id IN (${dbDeliverableIds.toString()})`).all();
+        dbDeliverables = _.orderBy(dbDeliverables, [d => he.unescape(d.title).toLowerCase()], ['asc']);
+
+        // Get complete list of deliverables that have names already, filtering out everything by the most recent addition of the item (some older entries are the same item with a different slug)
+        const deduplicatedAnnouncedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map((d: any[]) => d[d.length-1]).value();
+
+        // Get list of unannounced deliverables
+        const deduplicatedUnannouncedDeliverables = dbDeliverables.filter(d => he.unescape(d.title) && d.title.includes("Unannounced"));
+        dbDeliverables = [...deduplicatedAnnouncedDeliverables, ...deduplicatedUnannouncedDeliverables];
+
+        // Get list of deliverables that have been removed (denoted by missing end/start dates); these are included in the initial query to retrieve the most up to date versions
+        const removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
+        dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && he.unescape(r.title) === he.unescape(d.title) && !r.title.includes("Unannounced"))));
+
+        // Sort deliverables by announced (combining items with the same name)
+        const announcedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        // and unannounced (all have the same name)
+        const unAnnouncedDeliverables = dbDeliverables.filter(d => he.unescape(d.title) && d.title.includes("Unannounced"));
+
+        return [...announcedDeliverables, ...unAnnouncedDeliverables];
+    }
+
+    /**
+     * Gets the list of in progress deliverable ids
+     * @param db The database connection
+     * @param date The delta timestamp to use
+     * @param deliverables The deliverables to search with
+     * @returns The list of deliverable ids that have time allocations currently, or about to be, in progress
+     */
+    private static getInProgressDeliverables(db: Database, date: string, deliverables: any[], checkTeamIds: string = "") {
+        let deliverableIds = deliverables.map((dd) => dd.id).toString();
+        const query = `SELECT deliverable_id, team_id, MAX(max) as m FROM (SELECT DISTINCT MAX(addedDate) as max, deliverable_id, team_id from timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) AND 
+            startDate <= ${parseInt(date) + 86400000 * 14} AND ${date} <= endDate ${checkTeamIds?`AND team_id IN (${checkTeamIds}) `:""}GROUP BY uuid) GROUP BY deliverable_id ORDER BY m DESC`;
+        let results = db.prepare(query).all();
+        
+        deliverableIds = results?.map((r: any) => r.deliverable_id).toString() ?? "";
+
+        const teamCheckQuery = `SELECT id FROM (SELECT id, MAX(addedDate) FROM team_diff WHERE addedDate <= ${date} AND 
+            id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) GROUP BY slug ORDER BY addedDate DESC)`;
+        
+        const foundTeams = db.prepare(teamCheckQuery).all();
+        const teamIds = foundTeams?.map((ft:any)=>ft.id) as number[];
+        results = results?.filter((r:any)=> teamIds.indexOf(r.team_id) > -1);
+        return results?.map((r: any) => parseInt(r.deliverable_id));
     }
     //#endregion
 
