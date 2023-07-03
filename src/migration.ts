@@ -17,6 +17,7 @@ export default abstract class Migration {
                 db.prepare("DROP TABLE IF EXISTS discipline_diff").run();
                 db.prepare("DROP TABLE IF EXISTS in_progress_deliverables_cache").run();
                 db.prepare("DROP TABLE IF EXISTS sample_date_deliverables_cache").run();
+                db.prepare("DROP TABLE IF EXISTS deliverable_teams_cache").run();
             }
 
             // add json data format as tables
@@ -102,6 +103,9 @@ export default abstract class Migration {
 
             // add table for precalculated deliverables that show up on the sample date
             db.prepare("CREATE TABLE IF NOT EXISTS sample_date_deliverables_cache (sampleDate INTEGER NOT NULL UNIQUE, deliverable_ids TEXT, PRIMARY KEY(sampleDate))").run();
+
+            // add table for precalculated team ids used for the collection of deliverables at the time of the sample date
+            db.prepare("CREATE TABLE IF NOT EXISTS deliverable_teams_cache (sampleDate INTEGER NOT NULL UNIQUE, team_ids TEXT, PRIMARY KEY(sampleDate))").run();
         });
 
         migrate();

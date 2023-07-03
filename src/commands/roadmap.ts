@@ -490,21 +490,28 @@ export abstract class Roadmap {
         console.log(`Beginning caching process`);
         const sampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(addedDate) FROM (SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC)").get();
         const sampleDates = sampleDatesQuery['GROUP_CONCAT(addedDate)']?.split(",") ?? [];
+
         const inProgressSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM in_progress_deliverables_cache").get();
         const inProgressSampleDates = inProgressSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
         const cachedSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM sample_date_deliverables_cache").get();
         const cachedSampleDates = cachedSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
 
+        const cachedDeliverableTeamsQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM deliverable_teams_cache").get();
+        const cachedDeliverableTeams = cachedDeliverableTeamsQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
         const inProgressCacheInsert = db.prepare("INSERT INTO in_progress_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
         const sampleDateCacheInsert = db.prepare("INSERT INTO sample_date_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+        const deliverableTeamsCacheInsert = db.prepare("INSERT INTO deliverable_teams_cache (sampleDate, team_ids) VALUES (?,?)");
 
         const insertRows = db.transaction(() => {
             sampleDates.forEach((sd) => {
                 const hasInProgressCache = inProgressSampleDates.includes(sd);
                 const hasSampleDateCache = cachedSampleDates.includes(sd);
+                const hasDeliverableTeamsCache = cachedDeliverableTeams.includes(sd);
 
                 // already cached completely
-                if(hasInProgressCache && hasSampleDateCache) {
+                if(hasInProgressCache && hasSampleDateCache && hasDeliverableTeamsCache) {
                     return;
                 }
 
@@ -519,7 +526,13 @@ export abstract class Roadmap {
 
                 // cache sample date deliverable ids
                 if(!hasSampleDateCache) {
-                    sampleDateCacheInsert.run([sd, deliverableIds.join(",")])
+                    sampleDateCacheInsert.run([sd, deliverableIds.join(",")]);
+                }
+
+                // cache deliverable teams that were used for the given sample date
+                if(!hasDeliverableTeamsCache) {
+                    const teamIds = this.getDeliverableTeams(db, deliverablesForSampleDate);
+                    deliverableTeamsCacheInsert.run([sd, teamIds.join(",")]);
                 }
             });
         });
@@ -582,6 +595,19 @@ export abstract class Roadmap {
         const teamIds = foundTeams?.map((ft:any)=>ft.id) as number[];
         results = results?.filter((r:any)=> teamIds.indexOf(r.team_id) > -1);
         return results?.map((r: any) => parseInt(r.deliverable_id));
+    }
+
+    /**
+     * Gets a list of deliverables and the teams that were assigned to them.
+     * @param db The database connection
+     * @param deliverables The deliverables to filter by
+     * @returns The list of team ids
+     */
+    public static getDeliverableTeams(db: Database, deliverables: any[]) {
+        const deliverableIds = deliverables.map((dd) => dd.id).toString();
+        const deliverableTeamQuery = `SELECT DISTINCT team_id FROM deliverable_teams AS dt INNER JOIN team_diff AS td ON dt.team_id = td.id WHERE deliverable_id IN (${deliverableIds}) GROUP BY deliverable_id, title ORDER BY addedDate`;
+        const deliverableTeams = db.prepare(deliverableTeamQuery).all();
+        return deliverableTeams.map(dt => dt.team_id);
     }
     //#endregion
 
