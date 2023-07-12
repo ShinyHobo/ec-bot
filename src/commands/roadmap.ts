@@ -1225,12 +1225,18 @@ export abstract class Roadmap {
 
         // TODO - round compare time to beginning/end? of day; need to match time set for start/end dates
 
-        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+        const lookForwardOrBack = 86400000 * 14; // Two weeks
 
         let messages = [];
-        const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
+        //const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
 
-        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const inProgressDeliverableIds = db.prepare(`SELECT sampleDate, deliverable_ids FROM in_progress_deliverables_cache WHERE sampleDate <= ${compareTime} ORDER BY sampleDate DESC LIMIT 1`).get();
+        const sampleDate = inProgressDeliverableIds['sampleDate'];
+
+        //const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE deliverable_id IN (${inProgressDeliverableIds['deliverable_ids']}) GROUP BY uuid`).all();
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${sampleDate} <= endDate AND deliverable_id IN (${inProgressDeliverableIds['deliverable_ids']}) GROUP BY uuid`).all();
+
+        compareTime = sampleDate;
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
@@ -2020,7 +2026,8 @@ export abstract class Roadmap {
      */
     private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
         let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
-        const deduplicatedAnnouncedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map(d => d[d.length-1]).value();
+        dbDeliverables = _.orderBy(dbDeliverables, [d => he.unescape(d.title).toLowerCase()], ['asc']);
+        const deduplicatedAnnouncedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map(d => d[0]).value();
         const deduplicatedUnannouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
         dbDeliverables = [...deduplicatedAnnouncedDeliverables, ...deduplicatedUnannouncedDeliverables];
         let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
