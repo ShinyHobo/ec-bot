@@ -1466,7 +1466,7 @@ export abstract class Roadmap {
                     let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
                     sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                     const mergeDateRanges = GeneralHelpers.mergeDateRanges(sprints);
-                    let mergedSchedule = mergeDateRanges.filter(ms => (!futureSchedule && compareTime <= ms.endDate) || (futureSchedule && compareTime < ms.startDate && ms.startDate <= compareTime + lookForward))[0];
+                    let mergedSchedule = mergeDateRanges.filter(ms => (!futureSchedule && compareTime <= ms.endDate) || (futureSchedule && compareTime >= ms.startDate && ms.startDate <= compareTime + lookForward))[0];
                     if(mergedSchedule && compareTime < mergedSchedule.startDate && !futureSchedule) {
                         mergedSchedule = null;
                     }
@@ -1876,36 +1876,33 @@ export abstract class Roadmap {
         messages.push("**Ongoing Sprints**\n");
         const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
         const teams = _.uniqBy(last.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
+
+        // Grab all tasks that have end dates in the future relative to the sample date
         const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${end} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${last.map(l => l.id).toString()}) GROUP BY uuid`).all();
         const previouslyScheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${start} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${first.map(l => l.id).toString()}) GROUP BY uuid`).all();
 
-        // Consolidate discipline schedules
-        const currentTasks = scheduledTasks.filter(st => st.startDate <= end); // tasks that encompass the comparison time
-        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack);
-        const scheduledDeliverables = last.filter(d => currentDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
-        const futureTasks = scheduledTasks.filter(ft => !currentTasks.some(st => st.id === ft.id ) && ft.startDate <= end + lookForwardOrBack); // tasks that begin within the next two weeks
-        const futureDisciplineSchedules = this.getDisciplineSchedules(last, futureTasks, end, lookForwardOrBack, true);
+        // Get current and previous "in progress" deliverable ids
+        const inProgress = db.prepare(`SELECT sampleDate, deliverable_ids FROM in_progress_deliverables_cache WHERE sampleDate = ${end}`).all();
+        const inProgressIds = inProgress?.map((r:any) => r.deliverable_ids)[0].split(",");
+        const previousInProgress = db.prepare(`SELECT sampleDate, deliverable_ids FROM in_progress_deliverables_cache WHERE sampleDate = ${start}`).all();
+        const previousInProgressIds = previousInProgress?.map((r:any) => r.deliverable_ids)[0].split(",");
 
-        const previousCompare = start;
-        const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= previousCompare); // tasks that encompass the comparison time
-        const previousDisciplineSchedules = this.getDisciplineSchedules(first, previousTasks, previousCompare, lookForwardOrBack);
-        const previousDeliverables = first.filter(d => previousDisciplineSchedules.some(cds => cds.deliverable_id == d.id));
-        const previousFutureTasks = previouslyScheduledTasks.filter(ft => !previousTasks.some(st => st.id === ft.id ) && ft.startDate <= previousCompare + lookForwardOrBack); // tasks that begin within the next two weeks
-        const previousFutureDisciplineSchedules = this.getDisciplineSchedules(first, previousFutureTasks, previousCompare, lookForwardOrBack, true);
+        // Consolidate discipline schedules
+        const currentTasks = scheduledTasks.filter(st => st.startDate <= end + lookForwardOrBack);
+        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack, true);
+        const scheduledDeliverables = last.filter(d => inProgressIds.some(cds => cds == d.id));
+
+        const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= start + lookForwardOrBack);
+        const previousDisciplineSchedules = this.getDisciplineSchedules(first, previousTasks, start, lookForwardOrBack, true);
+        const previousDeliverables = first.filter(d => previousInProgressIds.some(cds => cds == d.id));
 
         scheduledDeliverables.forEach(d => {
             const dMatch = previousDeliverables.find(f => d.uuid === f.uuid || (f.title && f.title === d.title && !f.title.includes("Unannounced")));
             let matchDevs = 0;
             if(dMatch && dMatch.teams) {
                 const schedule = previousDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
-                const futureSchedule = previousFutureDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
-                if(futureSchedule) {
-                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
-                    schedule.teams = [...schedule.teams, ...futureTeams];
-                }
                 schedule.teams.forEach((mt, i) => {
-                    let wf = this.generateWaterfallChart(mt, previousCompare, futureSchedule, false);
-                    
+                    let wf = this.generateWaterfallChart(mt, start, null, false);
                     wf.split('\n').forEach(s => {
                         if(s.startsWith(' -')) {
                             matchDevs += +s.split('- ')[1].split('x')[0];
@@ -1916,13 +1913,9 @@ export abstract class Roadmap {
             let devs = 0;
             if(d.teams) {
                 const schedule = currentDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
-                const futureSchedule = futureDisciplineSchedules.find(cds => cds.deliverable_id === d.id);
-                if(futureSchedule) {
-                    const futureTeams = futureSchedule && futureSchedule.teams.filter(fs => !schedule.teams.some(st => st.id === fs.id));
-                    schedule.teams = [...schedule.teams, ...futureTeams];
-                }
-                schedule.teams.forEach((mt, i) => {
-                    this.generateWaterfallChart(mt, start, futureSchedule, false).split('\n').forEach(s => {
+                schedule && schedule.teams.forEach((mt, i) => {
+                    let wf = this.generateWaterfallChart(mt, end, null, false);
+                    wf.split('\n').forEach(s => {
                         if(s.startsWith(' -')) {
                             devs += +s.split('- ')[1].split('x')[0];
                         }
