@@ -66,6 +66,9 @@ export abstract class Roadmap {
             case 'summary': // generates reports for use by the SC subreddit news team
                 this.generateSummary(channel);
                 break;
+            case 'cache': // caches the deliverables ids for each sample date
+                this.cacheDeliverableIds(channel.db);
+                break;
             default:
                 channel.send(this.usage);
                 break;
@@ -163,6 +166,7 @@ export abstract class Roadmap {
 
                     const newDeliverables = this.adjustData(deliverables);
                     const changes = this.insertChanges(db, compareTime, newDeliverables);
+                    this.cacheDeliverableIds(db);
                     console.log(`Database updated with delta in ${Date.now() - compareTime} ms`);
 
                     if(changes.updated || changes.removed || changes.readded || changes.added) {
@@ -477,6 +481,134 @@ export abstract class Roadmap {
 
         return insertDeliverables(deliverables);
     }
+
+    /**
+     * Caches the deliverables ids for each sample date for faster lookup
+     * @param db The database connection
+     */
+    private static cacheDeliverableIds(db: Database) {
+        console.log(`Beginning caching process`);
+        const sampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(addedDate) FROM (SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC)").get();
+        const sampleDates = sampleDatesQuery['GROUP_CONCAT(addedDate)']?.split(",") ?? [];
+
+        const inProgressSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM in_progress_deliverables_cache").get();
+        const inProgressSampleDates = inProgressSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+        const cachedSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM sample_date_deliverables_cache").get();
+        const cachedSampleDates = cachedSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+        const cachedDeliverableTeamsQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM deliverable_teams_cache").get();
+        const cachedDeliverableTeams = cachedDeliverableTeamsQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+        const inProgressCacheInsert = db.prepare("INSERT INTO in_progress_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+        const sampleDateCacheInsert = db.prepare("INSERT INTO sample_date_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+        const deliverableTeamsCacheInsert = db.prepare("INSERT INTO deliverable_teams_cache (sampleDate, team_ids) VALUES (?,?)");
+
+        const insertRows = db.transaction(() => {
+            sampleDates.forEach((sd) => {
+                const hasInProgressCache = inProgressSampleDates.includes(sd);
+                const hasSampleDateCache = cachedSampleDates.includes(sd);
+                const hasDeliverableTeamsCache = cachedDeliverableTeams.includes(sd);
+
+                // already cached completely
+                if(hasInProgressCache && hasSampleDateCache && hasDeliverableTeamsCache) {
+                    return;
+                }
+
+                const deliverablesForSampleDate = this.getUniqueDeliverables(db, sd);
+                const deliverableIds = deliverablesForSampleDate.map(d => d.id);
+
+                // cache in progress deliverable ids
+                if(!hasInProgressCache) {
+                    const inProgressIds = this.getInProgressDeliverables(db, sd, deliverablesForSampleDate);
+                    inProgressCacheInsert.run([sd, inProgressIds.join(",")]);
+                }
+
+                // cache sample date deliverable ids
+                if(!hasSampleDateCache) {
+                    sampleDateCacheInsert.run([sd, deliverableIds.join(",")]);
+                }
+
+                // cache deliverable teams that were used for the given sample date
+                if(!hasDeliverableTeamsCache) {
+                    const teamIds = this.getDeliverableTeams(db, deliverablesForSampleDate);
+                    deliverableTeamsCacheInsert.run([sd, teamIds.join(",")]);
+                }
+            });
+        });
+        insertRows();
+        console.log(`Caching process complete!`);
+    }
+
+    /**
+     * Retrieves the list of unique deliverables for the given timestamp (optimized)
+     * @param db The database connection
+     * @param addedDate The delta datetime to lookup
+     * @returns The list of unique, listed deliverables on the progress tracker
+     */
+    private static getUniqueDeliverables(db: Database, addedDate: string) {
+        // Get all deliverables, grouping by uuid and ordering by add date, to get the most recent additions only
+        const dbDeliverableIds = (db.prepare(`SELECT id, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${addedDate} 
+            GROUP BY uuid ORDER BY addedDate ASC`).all()).map(d => d.id);
+
+        let dbDeliverables = db.prepare(`SELECT * FROM deliverable_diff WHERE id IN (${dbDeliverableIds.toString()})`).all();
+        dbDeliverables = _.orderBy(dbDeliverables, [d => he.unescape(d.title).toLowerCase()], ['asc']);
+
+        // Get complete list of deliverables that have names already, filtering out everything by the most recent addition of the item (some older entries are the same item with a different slug)
+        const deduplicatedAnnouncedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map((d: any[]) => d[d.length-1]).value();
+
+        // Get list of unannounced deliverables
+        const deduplicatedUnannouncedDeliverables = dbDeliverables.filter(d => he.unescape(d.title) && d.title.includes("Unannounced"));
+        dbDeliverables = [...deduplicatedAnnouncedDeliverables, ...deduplicatedUnannouncedDeliverables];
+
+        // Get list of deliverables that have been removed (denoted by missing end/start dates); these are included in the initial query to retrieve the most up to date versions
+        const removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);
+        dbDeliverables = dbDeliverables.filter(d => !removedDeliverables.some(r => r.uuid === d.uuid || (r.title && he.unescape(r.title) === he.unescape(d.title) && !r.title.includes("Unannounced"))));
+
+        // Sort deliverables by announced (combining items with the same name)
+        const announcedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        // and unannounced (all have the same name)
+        const unAnnouncedDeliverables = dbDeliverables.filter(d => he.unescape(d.title) && d.title.includes("Unannounced"));
+
+        return [...announcedDeliverables, ...unAnnouncedDeliverables];
+    }
+
+    /**
+     * Gets the list of in progress deliverable ids
+     * @param db The database connection
+     * @param date The delta timestamp to use
+     * @param deliverables The deliverables to search with
+     * @returns The list of deliverable ids that have time allocations currently, or about to be, in progress
+     */
+    private static getInProgressDeliverables(db: Database, date: string, deliverables: any[], checkTeamIds: string = "") {
+        let deliverableIds = deliverables.map((dd) => dd.id).toString();
+        const query = `SELECT deliverable_id, team_id, MAX(max) as m FROM (SELECT DISTINCT MAX(addedDate) as max, deliverable_id, team_id from timeAllocation_diff WHERE deliverable_id IN (${deliverableIds}) AND 
+            startDate <= ${parseInt(date) + 86400000 * 14} AND ${date} <= endDate ${checkTeamIds?`AND team_id IN (${checkTeamIds}) `:""}GROUP BY uuid) GROUP BY deliverable_id ORDER BY m DESC`;
+        let results = db.prepare(query).all();
+        
+        deliverableIds = results?.map((r: any) => r.deliverable_id).toString() ?? "";
+
+        const teamCheckQuery = `SELECT id FROM (SELECT id, MAX(addedDate) FROM team_diff WHERE addedDate <= ${date} AND 
+            id IN (SELECT team_id FROM deliverable_teams WHERE deliverable_id IN (${deliverableIds})) GROUP BY slug ORDER BY addedDate DESC)`;
+        
+        const foundTeams = db.prepare(teamCheckQuery).all();
+        const teamIds = foundTeams?.map((ft:any)=>ft.id) as number[];
+        results = results?.filter((r:any)=> teamIds.indexOf(r.team_id) > -1);
+        return results?.map((r: any) => parseInt(r.deliverable_id));
+    }
+
+    /**
+     * Gets a list of deliverables and the teams that were assigned to them.
+     * @param db The database connection
+     * @param deliverables The deliverables to filter by
+     * @returns The list of team ids
+     */
+    public static getDeliverableTeams(db: Database, deliverables: any[]) {
+        const deliverableIds = deliverables.map((dd) => dd.id).toString();
+        const deliverableTeamQuery = `SELECT DISTINCT team_id FROM deliverable_teams AS dt INNER JOIN team_diff AS td ON dt.team_id = td.id WHERE deliverable_id IN (${deliverableIds}) GROUP BY deliverable_id, title ORDER BY addedDate`;
+        const deliverableTeams = db.prepare(deliverableTeamQuery).all();
+        return deliverableTeams.map(dt => dt.team_id);
+    }
     //#endregion
 
     //#region Generate Progress Tracker Delta Report
@@ -650,10 +782,18 @@ export abstract class Roadmap {
                         }
 
                         if(dChanges.some(p => p.change === 'title')) {
-                            update.push(GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`));
+                            var firstTitle = he.unescape(f.title);
+                            var lastTitle = he.unescape(l.title);
+                            if(firstTitle !== lastTitle) {
+                                update.push(GeneralHelpers.shortenText(`\* Title has been updated from "${f.title}" to "${l.title}"`));
+                            }
                         }
                         if(dChanges.some(p => p.change === 'description')) {
-                            update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
+                            var firstDescription = he.unescape(f.description);
+                            var lastDescription = he.unescape(l.description);
+                            if(firstDescription !== lastDescription) {
+                                update.push(GeneralHelpers.shortenText(`\* Description has been updated from  \n"${f.description}"  \nto  \n"${l.description}"`));
+                            }
                         }
 
                         if(dChanges.some(p => p.change === 'teams')) {
@@ -991,7 +1131,11 @@ export abstract class Roadmap {
                     const dChanges = d.map(x => ({op: x.op, change: x.path && x.path[0], val: x.val}));
                     const changesToDetect = ['title','description', 'category', 'release_title'];
                     dChanges.filter(p => changesToDetect.some(detect => detect.includes(p.change.toString()))).forEach(dc => {
-                        messages.push(GeneralHelpers.shortenText(`* Release ${_.capitalize(dc.change)} has been changed from  \n'${oldDeliverable.card[dc.change]}'  \nto '${deliverable.card[dc.change]}'  \n`));
+                        let changeTitle = dc.change;
+                        if(dc.change == 'release_title') {
+                            changeTitle = "version";
+                        }
+                        messages.push(GeneralHelpers.shortenText(`* Release ${_.capitalize(changeTitle)} has been changed from  \n'${oldDeliverable.card[dc.change]}'  \nto '${deliverable.card[dc.change]}'  \n`));
                     });
                 }
             }
@@ -1081,12 +1225,18 @@ export abstract class Roadmap {
 
         // TODO - round compare time to beginning/end? of day; need to match time set for start/end dates
 
-        const lookForwardOrBack = 86400000 * 16; // Two weeks and two days
+        const lookForwardOrBack = 86400000 * 14; // Two weeks
 
         let messages = [];
-        const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
+        //const teams = _.uniqBy(deliverables.flatMap(d => d.teams), 'id').filter(t => t).map(t => t.id).toString();
 
-        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${compareTime} <= endDate AND team_id IN (${teams}) AND deliverable_id IN (${deliverables.map(l => l.id).toString()}) GROUP BY uuid`).all();
+        const inProgressDeliverableIds = db.prepare(`SELECT sampleDate, deliverable_ids FROM in_progress_deliverables_cache WHERE sampleDate <= ${compareTime} ORDER BY sampleDate DESC LIMIT 1`).get();
+        const sampleDate = inProgressDeliverableIds['sampleDate'];
+
+        //const scheduledTasks = db.prepare(`SELECT * FROM timeAllocation_diff WHERE deliverable_id IN (${inProgressDeliverableIds['deliverable_ids']}) GROUP BY uuid`).all();
+        const scheduledTasks = db.prepare(`SELECT *, MAX(addedDate) FROM timeAllocation_diff WHERE ${sampleDate} <= endDate AND deliverable_id IN (${inProgressDeliverableIds['deliverable_ids']}) GROUP BY uuid`).all();
+
+        compareTime = sampleDate;
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= compareTime); // tasks that encompass the comparison time
@@ -1715,7 +1865,7 @@ export abstract class Roadmap {
                         if(update.length) {
                             const title = f.title === 'Unannounced' ? f.description : f.title;
                             update = _.uniq(update);
-                            messages.push(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`);
+                            messages.push(he.unescape(`:SCN4: ${title.trim()} [${update.join(', ')}] ${GeneralHelpers.getProjectIcons(f)}\n`));
                         }
                     }
                 }
@@ -1780,33 +1930,39 @@ export abstract class Roadmap {
                 });
             }
 
-            let title = d.title.includes("Unannounced") ? d.description : d.title;
-            let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
-            let devText = `[${devs} Active Dev${devs>1?'s':''}:${devState}:] `;
-            messages.push(he.unescape(`:SCN5: ${title.trim()} ${devs ? devText : ''}${GeneralHelpers.getProjectIcons(d)}\n`));
+            if(devs) {
+                let title = d.title.includes("Unannounced") ? d.description : d.title;
+                let devState = devs>matchDevs?'increase':devs<matchDevs?'decrease':'nochange';
+                let devText = `[${devs} Active Dev${devs>1||devs==0?'s':''}:${devState}:] `;
+                messages.push(he.unescape(`:SCN5: ${title.trim()} ${devText}${GeneralHelpers.getProjectIcons(d)}\n`));
+            }
         });
 
         const filename = `ProgressTracker-${GeneralHelpers.convertTimeToHyphenatedDate(end)}`;
         const reportHeader = `**Progress Tracker Update | ${GeneralHelpers.convertTimeToSummaryDate(end)}**\n<https://${RSINetwork.rsi}/roadmap/progress-tracker>\n<https://shinytracker.app/>\n\n`;
         const report = messages.join('');
-        const strippedReport = report.replace(/:[^:]+: /g, '');
+        let reportContents = reportHeader + report;
 
         // Replace report text with translation
         // For English, provide a report without Discord icons
         if(translationFile || secondArg == 'en') {
-            let reportContents = reportHeader + strippedReport;
             if(translationFile) {
                 const translations = JSON.parse(fs.readFileSync(translationFile, 'utf-8'));
                 Object.entries(translations).forEach(([en, tr])  => {
                     reportContents = reportContents.replace(new RegExp(en, 'g'), tr.toString());
                 });
-                reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
-                reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
-                reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
             }
-            return channel.sendTextFile(reportContents, `${filename}_-_${secondArg}.txt`, true);
         }
-        channel.sendTextFile(reportHeader + report, `${filename}.txt`, true);
+
+        // Remove emojis
+        if(channel.args[2] == 'false') {
+            reportContents = reportContents.replace(new RegExp(':nochange:', 'g'), ' <=>');
+            reportContents = reportContents.replace(new RegExp(':decrease:', 'g'), ' vvv');
+            reportContents = reportContents.replace(new RegExp(':increase:', 'g'), ' ʌʌʌ');
+            reportContents = reportContents.replace(/:SCN[^:]+: /g, '');
+        }
+
+        channel.sendTextFile(reportContents, `${filename}${secondArg?'_-_'+secondArg:''}.txt`, true);
     }
 
     //#region Helper methods
@@ -1870,7 +2026,8 @@ export abstract class Roadmap {
      */
     private static buildDeliverables(date: number, db: Database, alphabetize: boolean = false): any[] {
         let dbDeliverables = db.prepare(`SELECT *, MAX(addedDate) as max FROM deliverable_diff WHERE addedDate <= ${date} GROUP BY uuid ORDER BY addedDate DESC`).all();
-        const deduplicatedAnnouncedDeliverables = _._(dbDeliverables.filter(d => d.title && !d.title.includes("Unannounced"))).groupBy('title').map(d => d[0]).value();
+        dbDeliverables = _.orderBy(dbDeliverables, [d => he.unescape(d.title).toLowerCase()], ['asc']);
+        const deduplicatedAnnouncedDeliverables = _.chain(dbDeliverables.filter(d => he.unescape(d.title) && !d.title.includes("Unannounced"))).groupBy(x => he.unescape(x.title)).map(d => d[0]).value();
         const deduplicatedUnannouncedDeliverables = dbDeliverables.filter(d => d.title && d.title.includes("Unannounced"));
         dbDeliverables = [...deduplicatedAnnouncedDeliverables, ...deduplicatedUnannouncedDeliverables];
         let removedDeliverables = dbDeliverables.filter(d => d.startDate === null && d.endDate === null);

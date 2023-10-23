@@ -173,9 +173,11 @@ export default abstract class GeneralHelpers {
      */
     public static getProjectIcons(deliverable: any): string {
         let projectIcons = "";
-        deliverable.project_ids.split(',').forEach(p => {
-            projectIcons += `${this.ProjectIcons[p]} `;
-        });
+        if(deliverable.project_ids) {
+            deliverable.project_ids.split(',').forEach(p => {
+                projectIcons += `${this.ProjectIcons[p]} `;
+            });
+        }
         return projectIcons;
     }
 }

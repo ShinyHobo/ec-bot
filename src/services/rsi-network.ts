@@ -216,7 +216,9 @@ export default abstract class RSINetwork {
     public static generateProjectIcons(deliverable: any): string {
         let projectIcons = "";
         deliverable.project_ids.split(',').forEach(p => {
-            projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
+            if(p) {
+                projectIcons += `<span><img src="https://${RSINetwork.rsi}${RSINetwork.ProjectImages[p]}"/></span>`;
+            }
         });
         return projectIcons;
     }
