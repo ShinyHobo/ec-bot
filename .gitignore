@@ -63,3 +63,6 @@ typings/
 *.db
 *.db-journal
 delta_db/
+ecbot-puller/bin/
+ecbot-puller/.vs/
+ecbot-puller/obj/

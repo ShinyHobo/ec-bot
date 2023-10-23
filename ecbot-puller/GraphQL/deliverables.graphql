@@ -1,0 +1,73 @@
+query deliverables($startDate: String!, $endDate: String!, $search: String, $deliverableSlug: String, $teamSlug: String, $projectSlugs: [String], $categoryIds: [Int], $sortBy: SortMethod, $offset: Int, $limit: Int) {
+  progressTracker {
+    deliverables(
+      startDate: $startDate
+      endDate: $endDate
+      search: $search
+      deliverableSlug: $deliverableSlug
+      teamSlug: $teamSlug
+      projectSlugs: $projectSlugs
+      categoryIds: $categoryIds
+      sortBy: $sortBy
+      offset: $offset
+      limit: $limit
+    ) {
+      totalCount
+      metaData {
+        ...Deliverable
+        card {
+          ...Card
+          #__typename
+        }
+        projects {
+          ...Project
+          #__typename
+        }
+        #__typename
+      }
+      #__typename
+    }
+    #__typename
+  }
+}
+
+fragment Deliverable on Deliverable {
+  uuid
+  slug
+  title
+  description
+  startDate
+  endDate
+  numberOfDisciplines
+  numberOfTeams
+  updateDate
+  totalCount
+  #__typename
+}
+
+fragment Card on Card {
+  id
+  title
+  description
+  category
+  release {
+    id
+    title
+    #__typename
+  }
+  board {
+    id
+    title
+    #__typename
+  }
+  updateDate
+  thumbnail
+  #__typename
+}
+
+fragment Project on Project {
+  title
+  #logo
+  #slug
+  #__typename
+}

@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34018.315
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ecbot-puller", "ecbot-puller.csproj", "{34F24228-2C32-4DEA-87C9-DD6419DCD038}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{34F24228-2C32-4DEA-87C9-DD6419DCD038}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34F24228-2C32-4DEA-87C9-DD6419DCD038}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34F24228-2C32-4DEA-87C9-DD6419DCD038}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34F24228-2C32-4DEA-87C9-DD6419DCD038}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9CA472A7-14C5-4C4E-938C-4D7AB770109F}
+	EndGlobalSection
+EndGlobal
