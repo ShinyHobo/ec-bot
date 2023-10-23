@@ -51,9 +51,9 @@ export default abstract class GeneralHelpers {
      */
     public static convertTimeToSummaryDate(time: number): string {
         const date = new Date(time);
-        const year = date.getUTCFullYear();
-        const month = this.longMonths[date.getUTCMonth()];
-        const day = date.getUTCDate().toString();
+        const year = date.getFullYear();
+        const month = this.longMonths[date.getMonth()];
+        const day = date.getDate().toString();
         return `${day} ${month} ${year}`;
     }
 
@@ -173,9 +173,11 @@ export default abstract class GeneralHelpers {
      */
     public static getProjectIcons(deliverable: any): string {
         let projectIcons = "";
-        deliverable.project_ids.split(',').forEach(p => {
-            projectIcons += `${this.ProjectIcons[p]} `;
-        });
+        if(deliverable.project_ids) {
+            deliverable.project_ids.split(',').forEach(p => {
+                projectIcons += `${this.ProjectIcons[p]} `;
+            });
+        }
         return projectIcons;
     }
 }
