@@ -17,9 +17,9 @@ namespace ecbot_puller.Services
             var start = DateTime.Now;
             var deliverables = new List<Deliverable>();
             var offset = 0;
-            var compledQuery = true;
+            var compiledQuery = true;
             //var initialResponse = 
-            RSINetwork.GetResponse(RSINetwork.DeliverableQuery(0, 1), QueryType.Deliverables);
+            RSINetwork.GetResponse(RSINetwork.DeliverableQuery(offset, 1), QueryType.Deliverables);
         }
     }
 }
