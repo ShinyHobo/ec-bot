@@ -26,7 +26,7 @@ namespace ecbot_puller.Services
         /// <returns>The RSI response</returns>
         public static Task<RSIResponse?> GetResponse(string data, QueryType type, int delay = 0, int retry = 0)
         {
-            return Task.Run(async () => {
+            return new Task<RSIResponse?>(() => {
                 HttpClient client = new HttpClient
                 {
                     BaseAddress = new Uri(RSI),
@@ -42,14 +42,16 @@ namespace ecbot_puller.Services
 
                 RSIResponse? rsiResponse = null;
 
-                var result = await client.SendAsync(request);
-                switch (result.StatusCode)
+                var sendTask = client.Send(request);
+
+                switch (sendTask.StatusCode)
                 {
                     case System.Net.HttpStatusCode.OK:
-                        var response = await result.Content.ReadAsStringAsync();
+                        var response = sendTask.Content.ReadAsStringAsync();
+                        response.Wait();
                         try
                         {
-                            rsiResponse = Newtonsoft.Json.JsonConvert.DeserializeObject<RSIResponse>(response);
+                            rsiResponse = Newtonsoft.Json.JsonConvert.DeserializeObject<RSIResponse>(response.Result);
                         }
                         catch (Exception ex)
                         {
