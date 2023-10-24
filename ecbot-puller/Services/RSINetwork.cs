@@ -84,8 +84,8 @@ namespace ecbot_puller.Services
             {
                 startDate = "2020-01-01",
                 endDate = "2050-12-31",
-                limit = limit,
-                offset = offset,
+                limit,
+                offset,
                 sortBy = sortBy.ToString()
             };
 
@@ -109,9 +109,9 @@ namespace ecbot_puller.Services
                 startDate = "2020-01-01",
                 endDate = "2050-12-31",
                 limit = 20,
-                offset = offset,
+                offset,
                 sortBy = sortBy.ToString(),
-                deliverableSlug = deliverableSlug
+                deliverableSlug
             };
 
             return JsonSerializer.Serialize(query);
@@ -132,8 +132,8 @@ namespace ecbot_puller.Services
             {
                 startDate = "2020-01-01",
                 endDate = "2050-12-31",
-                teamSlug = teamSlug,
-                deliverableSlug = deliverableSlug
+                teamSlug,
+                deliverableSlug
             };
 
             return JsonSerializer.Serialize(query);
