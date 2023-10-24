@@ -110,7 +110,7 @@ export abstract class Roadmap {
             // download and attach development team time assignments to each deliverable
             const teamPromises = [];
             deliverables.forEach((d) => {
-                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(offset, d.slug), RSINetwork.QueryTypeEnum.Teams, 20 * teamPromises.length).catch(() => completedQuery = false));
+                teamPromises.push(RSINetwork.getResponse(RSINetwork.teamsQuery(0, d.slug), RSINetwork.QueryTypeEnum.Teams, 20 * teamPromises.length).catch(() => completedQuery = false));
             });
 
             Promise.all(teamPromises).then(async (responses) => {
