@@ -27,6 +27,7 @@ namespace ecbot_puller.Services
                     offset += 20;
                 } while (offset < (initialResponse.Result.Data.ProgressTracker.Deliverables?.TotalCount ?? 0));
 
+                Console.WriteLine("Retrieving deliverables...");
                 Parallel.ForEach(deliverableRequests, (deliverableRequest, c) => {
                     deliverableRequest.RunSynchronously();
                     if(deliverableRequest.Result == null)
@@ -55,6 +56,7 @@ namespace ecbot_puller.Services
                 if (completedQuery)
                 {
                     var teams = new List<Team>();
+                    Console.WriteLine("Retrieving teams and disciplines...");
                     Parallel.ForEach(teamRequests, (teamRequest, c) => {
                         teamRequest.Task.RunSynchronously();
                         if(teamRequest.Task.Result == null)
@@ -69,13 +71,34 @@ namespace ecbot_puller.Services
                             {
                                 lock (teams)
                                     teams.AddRange(teamsReturned);
+                                foreach(var team in teamsReturned)
+                                {
+                                    var disciplineResponse = RSINetwork.GetResponse(RSINetwork.DisciplinesQuery(team.Slug, teamRequest.DeliverableSlug), QueryType.Disciplines, 20);
+                                    disciplineResponse.RunSynchronously();
+                                    if(disciplineResponse.Result != null)
+                                    {
+                                        if(disciplineResponse.Result.Data.ProgressTracker.Disciplines != null)
+                                        foreach(var discipline in disciplineResponse.Result.Data.ProgressTracker.Disciplines)
+                                        {
+                                            if(discipline.TimeAllocations != null)
+                                            foreach(var timeAllocation in discipline.TimeAllocations)
+                                            {
+                                                team.TimeAllocations.Single(ta => ta.Uuid == timeAllocation.Uuid).Discipline = new Discipline() { 
+                                                    Uuid = discipline.Uuid,
+                                                    NumberOfMembers = discipline.NumberOfMembers,
+                                                    Title = discipline.Title
+                                                }; ;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 deliverables.Single(d => d.Slug == teamRequest.DeliverableSlug).Teams = teamsReturned;
-                                // TODO - add discipline results here
                             }
                         }
                     });
 
-                    var end = DateTime.Now - start;
+                    var timeToDownload = DateTime.Now - start;
 
                     if (completedQuery)
                     {

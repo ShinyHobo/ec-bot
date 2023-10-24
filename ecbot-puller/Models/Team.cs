@@ -14,9 +14,10 @@
 
     public class TimeAllocation
     {
-        public required string StartDate { get; set; }
-        public required string EndDate { get; set; }
+        public string? StartDate { get; set; }
+        public string? EndDate { get; set; }
         public required string Uuid { get; set; }
-        public bool PartialTime { get; set; }
+        public bool? PartialTime { get; set; }
+        public Discipline? Discipline { get; set; }
     }
 }

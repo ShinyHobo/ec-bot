@@ -14,7 +14,7 @@
     {
         public Deliverables? Deliverables { get; set; }
         public Teams? Teams { get; set; }
-        public Disciplines? Disciplines { get; set; }
+        public List<Discipline>? Disciplines { get; set; }
     }
 
     public class Deliverables
@@ -27,10 +27,5 @@
     {
         public int TotalCount { get; set; }
         public required List<Team> MetaData { get; set; }
-    }
-
-    public class Disciplines
-    {
-        public required List<Discipline> MetaData { get; set; }
     }
 }
