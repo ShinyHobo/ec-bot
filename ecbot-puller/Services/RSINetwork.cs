@@ -1,5 +1,8 @@
-﻿using ecbot_puller.Models.Enums;
+﻿using ecbot_puller.Models;
+using ecbot_puller.Models.Enums;
 using System.Dynamic;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 
 namespace ecbot_puller.Services
@@ -9,9 +12,60 @@ namespace ecbot_puller.Services
     /// </summary>
     internal static class RSINetwork
     {
-        public static void GetResponse(string data, QueryType type, int delay = 0, int retry = 0)
+        #region Properties
+        public static readonly string RSI = "https://robertsspaceindustries.com/";
+        #endregion
+
+        /// <summary>
+        /// Gets data from RSI
+        /// </summary>
+        /// <param name="data">The graphql query</param>
+        /// <param name="type">The graphql query type</param>
+        /// <param name="delay">The number of milliseconds to delay the call by</param>
+        /// <param name="retry">The number of retries that have been attempted</param>
+        /// <returns>The RSI response</returns>
+        public static Task<RSIResponse?> GetResponse(string data, QueryType type, int delay = 0, int retry = 0)
         {
-            var sner = "";
+            return Task.Run(async () => {
+                HttpClient client = new HttpClient
+                {
+                    BaseAddress = new Uri(RSI),
+                    Timeout = new TimeSpan(0, 0, 10)
+                };
+                client.DefaultRequestHeaders.Accept
+                  .Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/graphql")
+                {
+                    Content = new StringContent(data, Encoding.UTF8, "application/json")
+                };
+
+                RSIResponse? rsiResponse = null;
+
+                var result = await client.SendAsync(request);
+                switch (result.StatusCode)
+                {
+                    case System.Net.HttpStatusCode.OK:
+                        var response = await result.Content.ReadAsStringAsync();
+                        try
+                        {
+                            rsiResponse = Newtonsoft.Json.JsonConvert.DeserializeObject<RSIResponse>(response);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine(ex.Message);
+                        }
+                        break;
+                    case System.Net.HttpStatusCode.RequestTimeout:
+                        // TODO
+                        break;
+                    default:
+                        // TODO
+                        break;
+                }
+
+                return rsiResponse;
+            });
         }
 
         /// <summary>

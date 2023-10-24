@@ -1,10 +1,5 @@
 ﻿using ecbot_puller.Models;
 using ecbot_puller.Models.Enums;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ecbot_puller.Services
 {
@@ -15,11 +10,10 @@ namespace ecbot_puller.Services
             Console.WriteLine("Retrieving roadmap state...");
 
             var start = DateTime.Now;
-            var deliverables = new List<Deliverable>();
+            var deliverables = new List<RSIResponse>();
             var offset = 0;
-            var compiledQuery = true;
-            //var initialResponse = 
-            RSINetwork.GetResponse(RSINetwork.DeliverableQuery(offset, 1), QueryType.Deliverables);
+            var completedQuery = true;
+            var initialResponse = await RSINetwork.GetResponse(RSINetwork.DeliverableQuery(offset, 1), QueryType.Deliverables);
         }
     }
 }

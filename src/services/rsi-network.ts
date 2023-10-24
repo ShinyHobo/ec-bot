@@ -66,7 +66,7 @@ export default abstract class RSINetwork {
     /**
      * Gets data from RSI
      * @param data The graphql query
-     * @param type The grpahql query type
+     * @param type The graphql query type
      * @param delay The number of milliseconds to delay the call by
      * @param retry The number of retries that have been attempted
      * @returns The response promise
