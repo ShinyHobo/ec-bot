@@ -98,11 +98,12 @@ namespace ecbot_puller.Services
                         }
                     });
 
-                    var timeToDownload = DateTime.Now - start;
-
                     if (completedQuery)
                     {
+                        var timeToDownload = DateTime.Now - start;
+                        Console.WriteLine($"Deliverables: {deliverables.Count} in {timeToDownload.TotalMilliseconds} milliseconds");
 
+                        // TODO - perform delta
                     }
                     else
                     {
