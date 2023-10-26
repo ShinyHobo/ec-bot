@@ -138,7 +138,52 @@ namespace ecbot_puller.Services
 
         public static List<Deliverable> AdjustData(List<Deliverable> deliverables)
         {
-            // TODO
+            // TODO - update deliverable model to set the following
+            foreach(var deliverable in deliverables)
+            {
+            //    d.startDate = Date.parse(d.startDate);
+            //    d.endDate = Date.parse(d.endDate);
+            //    d.updateDate = Date.parse(d.updateDate);
+            //    d.title = _.unescape(d.title);
+            //    d.description = _.unescape(d.description);
+            //    if (d.card)
+            //    {
+            //        d.card.tid = d.card.id;
+            //        if (d.card.release)
+            //        {
+            //            d.card.release_id = d.card.release.id;
+            //            d.card.release_title = d.card.release.title;
+            //        }
+            //        else
+            //        {
+            //            d.card.release_id = d.card.release_id;
+            //            d.card.release_title = d.card.release_title;
+            //        }
+            //        d.card.updateDate = Date.parse(d.card.updateDate);
+            //        delete(d.card.id);
+            //    }
+            //    if (d.teams)
+            //    {
+            //        d.teams.forEach((team) => {
+            //            team.startDate = Number(team.startDate) ? team.startDate : Date.parse(team.startDate);
+            //            team.endDate = Number(team.endDate) ? team.endDate : Date.parse(team.endDate);
+            //            if (team.timeAllocations)
+            //            {
+            //                team.timeAllocations.forEach((ta) => {
+            //                    ta.startDate = Date.parse(ta.startDate);
+            //                    ta.endDate = Date.parse(ta.endDate);
+            //                    if (ta.discipline)
+            //                    {
+            //                        ta.numberOfMembers = ta.discipline.numberOfMembers;
+            //                        ta.title = ta.discipline.title;
+            //                        ta.disciplineUuid = ta.discipline.uuid;
+            //                        delete(ta.discipline);
+            //                    }
+            //                });
+            //            }
+            //        });
+            //    }
+            }
             return deliverables;
         }
 
@@ -150,7 +195,61 @@ namespace ecbot_puller.Services
 
         public static void CacheDeliverableIds(SQLiteConnection db)
         {
-            // TODO
+            Console.Write("Beginning caching process");
+            //const sampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(addedDate) FROM (SELECT DISTINCT addedDate FROM deliverable_diff ORDER BY addedDate DESC)").get();
+            //const sampleDates = sampleDatesQuery['GROUP_CONCAT(addedDate)']?.split(",") ?? [];
+
+            //const inProgressSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM in_progress_deliverables_cache").get();
+            //const inProgressSampleDates = inProgressSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+            //const cachedSampleDatesQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM sample_date_deliverables_cache").get();
+            //const cachedSampleDates = cachedSampleDatesQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+            //const cachedDeliverableTeamsQuery = db.prepare("SELECT GROUP_CONCAT(sampleDate) FROM deliverable_teams_cache").get();
+            //const cachedDeliverableTeams = cachedDeliverableTeamsQuery['GROUP_CONCAT(sampleDate)']?.split(",") ?? [];
+
+            //const inProgressCacheInsert = db.prepare("INSERT INTO in_progress_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+            //const sampleDateCacheInsert = db.prepare("INSERT INTO sample_date_deliverables_cache (sampleDate, deliverable_ids) VALUES (?,?)");
+            //const deliverableTeamsCacheInsert = db.prepare("INSERT INTO deliverable_teams_cache (sampleDate, team_ids) VALUES (?,?)");
+
+            //const insertRows = db.transaction(() => {
+            //    sampleDates.forEach((sd) => {
+            //        const hasInProgressCache = inProgressSampleDates.includes(sd);
+            //        const hasSampleDateCache = cachedSampleDates.includes(sd);
+            //        const hasDeliverableTeamsCache = cachedDeliverableTeams.includes(sd);
+
+            //        // already cached completely
+            //        if (hasInProgressCache && hasSampleDateCache && hasDeliverableTeamsCache)
+            //        {
+            //            return;
+            //        }
+
+            //        const deliverablesForSampleDate = this.getUniqueDeliverables(db, sd);
+            //        const deliverableIds = deliverablesForSampleDate.map(d => d.id);
+
+            //        // cache in progress deliverable ids
+            //        if (!hasInProgressCache)
+            //        {
+            //            const inProgressIds = this.getInProgressDeliverables(db, sd, deliverablesForSampleDate);
+            //            inProgressCacheInsert.run([sd, inProgressIds.join(",")]);
+            //        }
+
+            //        // cache sample date deliverable ids
+            //        if (!hasSampleDateCache)
+            //        {
+            //            sampleDateCacheInsert.run([sd, deliverableIds.join(",")]);
+            //        }
+
+            //        // cache deliverable teams that were used for the given sample date
+            //        if (!hasDeliverableTeamsCache)
+            //        {
+            //            const teamIds = this.getDeliverableTeams(db, deliverablesForSampleDate);
+            //            deliverableTeamsCacheInsert.run([sd, teamIds.join(",")]);
+            //        }
+            //    });
+            //});
+            //insertRows();
+            Console.WriteLine("Caching process complete!");
         }
     }
 }
