@@ -1,5 +1,6 @@
 ﻿using ecbot_puller.Models;
 using ecbot_puller.Models.Enums;
+using System.Data.SQLite;
 
 namespace ecbot_puller.Services
 {
@@ -101,9 +102,27 @@ namespace ecbot_puller.Services
                     if (completedQuery)
                     {
                         var timeToDownload = DateTime.Now - start;
-                        Console.WriteLine($"Deliverables: {deliverables.Count} in {timeToDownload.TotalMilliseconds} milliseconds");
+                        Console.WriteLine($"Deliverables: {deliverables.Count} in {timeToDownload.TotalMilliseconds} milliseconds. Finding delta...");
 
-                        // TODO - perform delta
+                        using (var db = new SQLiteConnection("Data Source=delta.db;Version=3;"))
+                        {
+                            db.Open();
+
+                            // TODO - populate db with initial values
+
+                            var newDeliverables = AdjustData(deliverables);
+                            var changes = InsertChanges(db, start.Subtract(new DateTime(1970, 1, 1)).TotalMilliseconds, newDeliverables);
+
+                            if(changes.ChangesDetected)
+                            {
+                                CacheDeliverableIds(db);
+                                Console.WriteLine($"Database updated with delta in {(DateTime.Now - start).TotalMilliseconds} ms");
+                            }
+                            else
+                            {
+                                Console.WriteLine("No changes were detected");
+                            }
+                        }
                     }
                     else
                     {
@@ -115,6 +134,23 @@ namespace ecbot_puller.Services
                     Console.WriteLine("Roadmap retrieval timed out; please try again later.");
                 }
             }
+        }
+
+        public static List<Deliverable> AdjustData(List<Deliverable> deliverables)
+        {
+            // TODO
+            return deliverables;
+        }
+
+        public static Changes InsertChanges(SQLiteConnection db, double compareTime, List<Deliverable> newDeliverables)
+        {
+            // TODO
+            return new Changes();
+        }
+
+        public static void CacheDeliverableIds(SQLiteConnection db)
+        {
+            // TODO
         }
     }
 }
