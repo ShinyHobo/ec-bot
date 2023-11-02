@@ -1901,7 +1901,7 @@ export abstract class Roadmap {
             let matchDevs = 0;
             if(dMatch && dMatch.teams) {
                 const schedule = previousDisciplineSchedules.find(cds => cds.deliverable_id === dMatch.id);
-                schedule.teams.forEach((mt, i) => {
+                schedule && schedule.teams.forEach((mt, i) => {
                     let wf = this.generateWaterfallChart(mt, start, null, false);
                     wf.split('\n').forEach(s => {
                         if(s.startsWith(' -')) {

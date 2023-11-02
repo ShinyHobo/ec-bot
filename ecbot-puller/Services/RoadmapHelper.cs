@@ -1,12 +1,6 @@
 ﻿using ecbot_puller.Models;
 using ecbot_puller.Models.Enums;
-using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
-using System;
 using System.Data.SQLite;
-using static System.Runtime.InteropServices.JavaScript.JSType;
-using System.Text.RegularExpressions;
-using System.Threading.Channels;
-using System.Data.Common;
 
 namespace ecbot_puller.Services
 {
