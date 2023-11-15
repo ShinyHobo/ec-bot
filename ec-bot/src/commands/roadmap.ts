@@ -1466,7 +1466,7 @@ export abstract class Roadmap {
                     let sprints = _._(s).groupBy((time) => [time.startDate, time.endDate].join()).map(v=>v).value();
                     sprints = sprints.map(sprint => ({fullTime: _.countBy(sprint, t => t.partialTime > 0).false ?? 0, partTime: _.countBy(sprint, t => t.partialTime > 0).true ?? 0, ...sprint[0]}));
                     const mergeDateRanges = GeneralHelpers.mergeDateRanges(sprints);
-                    let mergedSchedule = mergeDateRanges.filter(ms => (!futureSchedule && compareTime <= ms.endDate) || (futureSchedule && compareTime >= ms.startDate && ms.startDate <= compareTime + lookForward))[0];
+                    let mergedSchedule = mergeDateRanges.filter(ms => (!futureSchedule && compareTime <= ms.endDate) || (futureSchedule && compareTime <= ms.startDate && ms.startDate <= compareTime + lookForward))[0];
                     if(mergedSchedule && compareTime < mergedSchedule.startDate && !futureSchedule) {
                         mergedSchedule = null;
                     }
@@ -1548,7 +1548,7 @@ export abstract class Roadmap {
             if(ds.merged) {
                 const fullTimePercent = Math.round(this.calculateTaskLoad(ds.merged) * 100);
                 const tasks = ds.merged.fullTime + ds.merged.partTime;
-                const continuingWork = futureTeam && futureTeam.schedules.find(fts => fts.merged.title === ds.merged.title && fts.merged.id !== ds.merged.id);
+                const continuingWork = futureTeam && futureTeam.schedules.find(fts => fts.merged.title === ds.merged.title && ds.merged.endDate <= fts.merged.startDate);
                 if(ds.merged.startDate <= compareTime) {
                     timelines.push(`${publish?'':' - '}${ds.merged.numberOfMembers}x ${ds.merged.title} dev${ds.merged.numberOfMembers>1?'s':''} working on ${tasks} task${tasks>1?'s':''} (${fullTimePercent}% load)`+
                     ` thru ${GeneralHelpers.convertTimeToHyphenatedDate(ds.merged.endDate)}${publish?'<br/>':''}\n`);
