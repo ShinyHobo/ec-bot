@@ -1889,7 +1889,7 @@ export abstract class Roadmap {
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= end + lookForwardOrBack);
-        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack, true);
+        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack);
         const scheduledDeliverables = last.filter(d => inProgressIds.some(cds => cds == d.id));
 
         const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= start + lookForwardOrBack);
