@@ -33,8 +33,8 @@ export abstract class Roadmap {
         Teams: "Teams"
     });
 
-    /** The number of developers employed at CIG as of the 2020 financial report */
-    private static readonly HiredDevs = 512;
+    /** The number of developers employed at CIG as of the 2020 financial report - 512 */
+    private static readonly HiredDevs = 780; // estimated from 1100 figure 
 
     /** Set to true to allow the command to export to discord */
     private static readonly AllowExportSnapshotsToDiscord = false;
@@ -1889,7 +1889,7 @@ export abstract class Roadmap {
 
         // Consolidate discipline schedules
         const currentTasks = scheduledTasks.filter(st => st.startDate <= end + lookForwardOrBack);
-        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack);
+        const currentDisciplineSchedules = this.getDisciplineSchedules(last, currentTasks, end, lookForwardOrBack, true);
         const scheduledDeliverables = last.filter(d => inProgressIds.some(cds => cds == d.id));
 
         const previousTasks = previouslyScheduledTasks.filter(st => st.startDate <= start + lookForwardOrBack);
