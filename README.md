@@ -25,6 +25,15 @@ In the console, run the following commands, from the root directory after instal
 
 If there are module conflicts, delete the node_modules folder and rerun the commands. 
 
+### Splitting the Database
+1. Install WSL and sqlite3
+- ```wsl --install```
+- ```sudo apt-get update && sudo apt-get install sqlite3```
+2. Create delta_db empty directory in root
+3. Fix script line endings for Windows
+- ```sed -i -e 's/\r$//' create_db.sh```
+4. Run ```./create_db.sh delta.db delta_db```
+
 ### Discord Bot
 If you want to use the Discord bot, you first need to add a .env file containing `TOKEN=[BOT TOKEN HERE]` to the root folder.
 
